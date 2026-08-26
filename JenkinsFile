@@ -4,29 +4,15 @@ pipeline {
 
     environment {
 
-        // ==========================================
-        // JAVA CONFIGURATION
-        // ==========================================
-
         JAVA_HOME = 'C:/Program Files/Java/jdk-17.0.2'
-
-
-        // ==========================================
-        // SPRING BOOT BACKEND
-        // ==========================================
 
         JAR_FILE = 'target/quizapp-1.0.0.jar'
 
-        BACKEND_PORT = '8020'
-
         DEPLOY_DIR = 'C:/JenkinsStorage'
 
+        BACKEND_PORT = '8020'
+
         HEALTH_URL = 'http://localhost:8020/api/quiz/topics'
-
-
-        // ==========================================
-        // TOMCAT CONFIGURATION
-        // ==========================================
 
         TOMCAT_HOME =
             'D:/apache-tomcat-9.0.53-windows-x64/apache-tomcat-9.0.53'
@@ -34,238 +20,116 @@ pipeline {
         TOMCAT_WEBAPPS =
             'D:/apache-tomcat-9.0.53-windows-x64/apache-tomcat-9.0.53/webapps'
 
-
-        // ==========================================
-        // APPZILLON FRONTEND
-        // ==========================================
-
         FRONTEND_WAR = 'quizapp.war'
 
         FRONTEND_CONTEXT = 'quizapp'
     }
 
-
     stages {
-
-
-        // ==================================================
-        // 1. BUILD BACKEND
-        // ==================================================
 
         stage('Build Backend') {
 
             steps {
 
-                echo '=============================================='
-                echo 'BUILDING QUIZAPP SPRING BOOT BACKEND'
-                echo '=============================================='
-
                 bat '''
-
-                    echo.
-                    echo Checking Java version...
-                    echo.
 
                     "%JAVA_HOME%\\bin\\java.exe" -version
 
-                    echo.
-                    echo Starting Maven build...
-                    echo.
-
                     mvn clean package -DskipTests
 
-                    echo.
-                    echo Generated JAR files:
-                    echo.
+                    dir "%WORKSPACE%\\target\\*.jar"
 
-                    dir target\\*.jar
+                    if not exist "%WORKSPACE%\\target\\quizapp-1.0.0.jar" (
+                        echo ERROR: quizapp-1.0.0.jar was not created.
+                        exit /b 1
+                    )
 
                 '''
             }
         }
-
-
-        // ==================================================
-        // 2. RUN TESTS
-        // ==================================================
 
         stage('Run Tests') {
 
             steps {
 
-                echo '=============================================='
-                echo 'RUNNING BACKEND TESTS'
-                echo '=============================================='
-
                 bat '''
-
                     mvn test
-
                 '''
             }
         }
-
-
-        // ==================================================
-        // 3. DEPLOY SPRING BOOT BACKEND
-        // ==================================================
 
         stage('Deploy Backend') {
 
             steps {
 
-                echo '=============================================='
-                echo 'DEPLOYING SPRING BOOT BACKEND'
-                echo '=============================================='
-
                 bat '''
 
-                    echo.
-                    echo Checking whether port 8020 is already in use...
-                    echo.
-
-
                     for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8020 ^| findstr LISTENING') do (
-
-                        echo Found process %%a using port 8020.
-
-                        echo Stopping process %%a...
-
                         taskkill /F /PID %%a >nul 2>&1
-
                     )
 
+                    ping 127.0.0.1 -n 4 >nul
 
-                    echo.
-                    echo Waiting for old application to stop...
-                    echo.
-
-                    timeout /t 3 /nobreak >nul
-
-
-                    echo.
-                    echo Checking deployment directory...
-                    echo.
-
-
-                    if not exist "%DEPLOY_DIR%" (
-
-                        mkdir "%DEPLOY_DIR%"
-
+                    if not exist "C:\\JenkinsStorage" (
+                        mkdir "C:\\JenkinsStorage"
                     )
 
+                    if not exist "%WORKSPACE%\\target\\quizapp-1.0.0.jar" (
+                        echo ERROR: JAR not found.
+                        exit /b 1
+                    )
 
-                    echo.
-                    echo Copying new backend JAR...
-                    echo.
+                    copy /Y ^
+                    "%WORKSPACE%\\target\\quizapp-1.0.0.jar" ^
+                    "C:\\JenkinsStorage\\quizapp-1.0.0.jar"
 
+                    if errorlevel 1 (
+                        echo ERROR: Failed to copy JAR.
+                        exit /b 1
+                    )
 
-                    copy /Y "%JAR_FILE%" "%DEPLOY_DIR%\\quizapp-1.0.0.jar"
-
-
-                    echo.
-                    echo Starting QuizApp Spring Boot application...
-                    echo.
-
-
-                    cd /d "%DEPLOY_DIR%"
-
+                    cd /d "C:\\JenkinsStorage"
 
                     start "QuizApp-Backend" /B cmd /c ^
-                    "set JENKINS_NODE_COOKIE=dontKillMe && "%JAVA_HOME%\\bin\\java.exe" -jar quizapp-1.0.0.jar > backend.log 2>&1"
+                    "set JENKINS_NODE_COOKIE=dontKillMe && "%JAVA_HOME%\\bin\\java.exe" -jar "C:\\JenkinsStorage\\quizapp-1.0.0.jar" > "C:\\JenkinsStorage\\backend.log" 2>&1"
 
-
-                    echo.
-                    echo Backend start command executed.
-                    echo.
-
-                    timeout /t 5 /nobreak >nul
+                    ping 127.0.0.1 -n 6 >nul
 
                 '''
             }
         }
 
-
-        // ==================================================
-        // 4. BACKEND HEALTH CHECK
-        // ==================================================
-
         stage('Backend Health Check') {
 
             steps {
-
-                echo '=============================================='
-                echo 'CHECKING SPRING BOOT BACKEND'
-                echo '=============================================='
 
                 bat '''
 
                     set RETRIES=20
 
-
                     :CHECK_BACKEND
-
-
-                    echo.
-                    echo Checking backend:
-                    echo %HEALTH_URL%
-                    echo.
-
 
                     curl -s -o nul -w "%%{http_code}" "%HEALTH_URL%" | findstr "200 201"
 
-
                     if not errorlevel 1 (
-
-                        echo.
-                        echo ==========================================
-                        echo BACKEND IS RUNNING SUCCESSFULLY
-                        echo ==========================================
-
+                        echo BACKEND IS RUNNING
                         exit /b 0
-
                     )
-
 
                     set /a RETRIES-=1
 
-
                     if %RETRIES% LEQ 0 (
 
-                        echo.
-                        echo ==========================================
-                        echo BACKEND FAILED TO START
-                        echo ==========================================
-                        echo.
+                        echo BACKEND HEALTH CHECK FAILED
 
-
-                        echo Backend log:
-                        echo.
-
-
-                        if exist "%DEPLOY_DIR%\\backend.log" (
-
-                            type "%DEPLOY_DIR%\\backend.log"
-
-                        ) else (
-
-                            echo backend.log was not found.
-
+                        if exist "C:\\JenkinsStorage\\backend.log" (
+                            type "C:\\JenkinsStorage\\backend.log"
                         )
 
-
                         exit /b 1
-
                     )
 
-
-                    echo Backend is not ready yet.
-
-                    echo Waiting 3 seconds...
-
-
-                    timeout /t 3 /nobreak >nul
-
+                    ping 127.0.0.1 -n 4 >nul
 
                     goto CHECK_BACKEND
 
@@ -273,157 +137,75 @@ pipeline {
             }
         }
 
-
-        // ==================================================
-        // 5. DEPLOY APPZILLON FRONTEND
-        // ==================================================
-
         stage('Deploy Appzillon Frontend') {
 
             steps {
 
-                echo '=============================================='
-                echo 'DEPLOYING APPZILLON FRONTEND'
-                echo '=============================================='
-
                 bat '''
-
-                    echo.
-                    echo Stopping Tomcat...
-                    echo.
-
 
                     call "%TOMCAT_HOME%\\bin\\shutdown.bat"
 
-
-                    echo.
-                    echo Waiting for Tomcat to stop...
-                    echo.
-
-
-                    timeout /t 5 /nobreak >nul
-
-
-                    echo.
-                    echo Removing previous WAR...
-                    echo.
-
+                    ping 127.0.0.1 -n 6 >nul
 
                     if exist "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%" (
-
                         del /F /Q "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%"
-
                     )
-
-
-                    echo.
-                    echo Removing previously extracted application...
-                    echo.
-
 
                     if exist "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%" (
-
                         rmdir /S /Q "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%"
-
                     )
 
+                    if not exist "%WORKSPACE%\\%FRONTEND_WAR%" (
+                        echo ERROR: WAR file not found.
+                        exit /b 1
+                    )
 
-                    echo.
-                    echo Copying new Appzillon WAR...
-                    echo.
+                    copy /Y ^
+                    "%WORKSPACE%\\%FRONTEND_WAR%" ^
+                    "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%"
 
-
-                    copy /Y "%WORKSPACE%\\%FRONTEND_WAR%" "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%"
-
-
-                    echo.
-                    echo Starting Tomcat...
-                    echo.
-
+                    if errorlevel 1 (
+                        echo ERROR: Failed to copy Appzillon WAR.
+                        exit /b 1
+                    )
 
                     call "%TOMCAT_HOME%\\bin\\startup.bat"
 
-
-                    echo.
-                    echo Tomcat started.
-                    echo.
+                    ping 127.0.0.1 -n 10 >nul
 
                 '''
             }
         }
 
-
-        // ==================================================
-        // 6. FRONTEND HEALTH CHECK
-        // ==================================================
-
         stage('Frontend Health Check') {
 
             steps {
 
-                echo '=============================================='
-                echo 'CHECKING APPZILLON FRONTEND'
-                echo '=============================================='
-
                 bat '''
-
-                    echo.
-                    echo Waiting for Tomcat...
-                    echo.
-
-
-                    timeout /t 10 /nobreak >nul
-
-
-                    echo.
-                    echo Checking Appzillon application...
-                    echo.
-
 
                     curl -I "http://localhost:8080/%FRONTEND_CONTEXT%/"
 
-
                     if errorlevel 1 (
-
-                        echo.
-                        echo ==========================================
                         echo FRONTEND HEALTH CHECK FAILED
-                        echo ==========================================
-
                         exit /b 1
-
                     )
 
-
-                    echo.
-                    echo ==========================================
                     echo APPZILLON FRONTEND IS RUNNING
-                    echo ==========================================
 
                 '''
             }
         }
     }
 
-
-    // ======================================================
-    // POST BUILD ACTIONS
-    // ======================================================
-
     post {
 
         success {
 
             echo '''
-==================================================
 QUIZAPP CI/CD PIPELINE SUCCESSFUL
-==================================================
 
 Backend:
 http://localhost:8020
-
-Backend API:
-http://localhost:8020/api/quiz/topics
 
 Frontend:
 http://localhost:8080/quizapp/
@@ -431,27 +213,18 @@ http://localhost:8080/quizapp/
 Backend JAR:
 C:\\JenkinsStorage\\quizapp-1.0.0.jar
 
-Tomcat:
-D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53
-
-==================================================
+Backend Log:
+C:\\JenkinsStorage\\backend.log
 '''
-
         }
-
 
         failure {
 
             echo '''
-==================================================
 QUIZAPP CI/CD PIPELINE FAILED
-==================================================
 
-Please check the Jenkins Console Output.
-
-==================================================
+Check the Jenkins Console Output.
 '''
-
         }
     }
 }

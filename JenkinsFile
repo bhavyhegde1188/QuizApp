@@ -26,15 +26,25 @@ pipeline {
     stages {
 
         stage('Checkout') {
+
             steps {
+
                 echo 'Source code already checked out by Jenkins SCM.'
+
             }
         }
 
         stage('Build Backend') {
+
             steps {
+
                 bat '''
+                    echo ==========================================
+                    echo BUILDING BACKEND
+                    echo ==========================================
+
                     echo Checking Java...
+
                     "%JAVA_HOME%\\bin\\java.exe" -version
 
                     echo Building Spring Boot application...
@@ -52,9 +62,13 @@ pipeline {
         }
 
         stage('Run Tests') {
+
             steps {
+
                 bat '''
-                    echo Running Maven tests...
+                    echo ==========================================
+                    echo RUNNING TESTS
+                    echo ==========================================
 
                     mvn test
 
@@ -69,9 +83,13 @@ pipeline {
         }
 
         stage('Prepare Deployment') {
+
             steps {
+
                 bat '''
-                    echo Checking deployment directory...
+                    echo ==========================================
+                    echo PREPARING DEPLOYMENT
+                    echo ==========================================
 
                     if not exist "C:\\JenkinsStorage" (
                         mkdir "C:\\JenkinsStorage"
@@ -83,7 +101,9 @@ pipeline {
         }
 
         stage('Deploy Backend') {
+
             steps {
+
                 bat '''
                     echo ==========================================
                     echo DEPLOYING BACKEND
@@ -126,7 +146,9 @@ pipeline {
         }
 
         stage('Backend Health Check') {
+
             steps {
+
                 bat '''
                     echo ==========================================
                     echo BACKEND HEALTH CHECK
@@ -150,7 +172,9 @@ pipeline {
                     set /a RETRIES-=1
 
                     if %RETRIES% LEQ 0 (
+
                         echo ERROR: Backend health check failed.
+
                         echo.
                         echo Backend log:
                         echo ------------------------------------------
@@ -160,6 +184,7 @@ pipeline {
                         )
 
                         echo ------------------------------------------
+
                         exit /b 1
                     )
 
@@ -171,7 +196,9 @@ pipeline {
         }
 
         stage('Deploy Appzillon Frontend') {
+
             steps {
+
                 bat '''
                     echo ==========================================
                     echo DEPLOYING APPZILLON FRONTEND
@@ -235,7 +262,13 @@ pipeline {
                     set /a RETRIES-=1
 
                     if %RETRIES% LEQ 0 (
+
                         echo ERROR: Tomcat did not start on port 8084.
+
+                        echo Check Tomcat logs:
+
+                        dir "%TOMCAT_HOME%\\logs"
+
                         exit /b 1
                     )
 
@@ -247,7 +280,9 @@ pipeline {
         }
 
         stage('Frontend Health Check') {
+
             steps {
+
                 bat '''
                     echo ==========================================
                     echo FRONTEND HEALTH CHECK
@@ -264,11 +299,35 @@ pipeline {
                 '''
             }
         }
+
+        stage('Schedule Shutdown') {
+
+            steps {
+
+                bat '''
+                    echo ==========================================
+                    echo SCHEDULING 3 HOUR SHUTDOWN
+                    echo ==========================================
+
+                    echo Backend and frontend will continue running.
+
+                    echo They will be stopped automatically after 3 hours.
+
+                    start "QuizApp-Shutdown" /B cmd /c ^
+                    "timeout /t 10800 /nobreak >nul && ^
+                    for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8020 ^| findstr LISTENING') do taskkill /F /PID %%a >nul 2>&1 && ^
+                    call "%TOMCAT_HOME%\\bin\\shutdown.bat""
+
+                    echo 3 hour shutdown scheduled successfully.
+                '''
+            }
+        }
     }
 
     post {
 
         success {
+
             echo '''
 ==========================================
 QUIZAPP CI/CD SUCCESSFUL
@@ -289,11 +348,15 @@ C:\\JenkinsStorage\\QuizApp.war
 Backend Log:
 C:\\JenkinsStorage\\backend.log
 
+Application Shutdown:
+After 3 hours
+
 ==========================================
 '''
         }
 
         failure {
+
             echo '''
 ==========================================
 QUIZAPP CI/CD FAILED

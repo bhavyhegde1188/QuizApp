@@ -4,7 +4,7 @@ pipeline {
 
     options {
         skipDefaultCheckout(true)
-        timeout(time: 20, unit: 'MINUTES')
+        timeout(time: 25, unit: 'MINUTES')
     }
 
     environment {
@@ -20,12 +20,25 @@ pipeline {
         // JENKINS STORAGE
         // =====================================================
 
-        DEPLOYMENT_DIR = 'C:\\JenkinsStorage'
+        STORAGE_DIR = 'C:\\JenkinsStorage'
 
-        QUIZAPP_WAR = 'C:\\JenkinsStorage\\QuizApp.war'
+        QUIZAPP_WAR =
+            'C:\\JenkinsStorage\\QuizApp.war'
 
         APPZILLON_SERVER_WAR =
             'C:\\JenkinsStorage\\AppzillonServer.war'
+
+        BACKEND_DEPLOY_DIR =
+            'C:\\JenkinsStorage'
+
+        BACKEND_DEPLOY_JAR =
+            'C:\\JenkinsStorage\\quizapp-1.0.0.jar'
+
+        BACKEND_LOG =
+            'C:\\JenkinsStorage\\backend.log'
+
+        BACKEND_ERROR_LOG =
+            'C:\\JenkinsStorage\\backend-error.log'
 
 
         // =====================================================
@@ -34,11 +47,8 @@ pipeline {
 
         BACKEND_PORT = '8020'
 
-        BACKEND_LOG =
-            'C:\\JenkinsStorage\\backend.log'
-
-        BACKEND_ERROR_LOG =
-            'C:\\JenkinsStorage\\backend-error.log'
+        BACKEND_URL =
+            'http://localhost:8020/api/topics'
 
 
         // =====================================================
@@ -55,11 +65,8 @@ pipeline {
 
 
         // =====================================================
-        // APPLICATION URLS
+        // FRONTEND
         // =====================================================
-
-        BACKEND_URL =
-            'http://localhost:8020/api/topics'
 
         FRONTEND_URL =
             'http://localhost:8084/QuizApp/'
@@ -108,7 +115,7 @@ pipeline {
                     @echo off
 
                     echo.
-                    echo ==================== JAVA ====================
+                    echo ================= JAVA =================
 
                     java -version
 
@@ -119,21 +126,33 @@ pipeline {
 
 
                     echo.
-                    echo ==================== MAVEN ====================
+                    echo ================= MAVEN =================
 
                     mvn -version
 
                     if errorlevel 1 (
-                        echo ERROR: Maven is not available in PATH.
+                        echo ERROR: Maven is not available.
                         exit /b 1
                     )
 
 
                     echo.
-                    echo ==================== TOMCAT ====================
+                    echo ================= STORAGE =================
+
+                    if not exist "%STORAGE_DIR%" (
+                        echo Creating JenkinsStorage directory...
+                        mkdir "%STORAGE_DIR%"
+                    )
+
+                    echo JenkinsStorage:
+                    echo %STORAGE_DIR%
+
+
+                    echo.
+                    echo ================= TOMCAT =================
 
                     if not exist "%TOMCAT_HOME%" (
-                        echo ERROR: Tomcat directory not found.
+                        echo ERROR: Tomcat not found:
                         echo %TOMCAT_HOME%
                         exit /b 1
                     )
@@ -141,11 +160,8 @@ pipeline {
                     echo Tomcat found.
 
 
-                    echo.
-                    echo ==================== TOMCAT WEBAPPS ====================
-
                     if not exist "%TOMCAT_WEBAPPS%" (
-                        echo ERROR: Tomcat webapps directory not found.
+                        echo ERROR: Tomcat webapps directory not found:
                         echo %TOMCAT_WEBAPPS%
                         exit /b 1
                     )
@@ -154,11 +170,10 @@ pipeline {
 
 
                     echo.
-                    echo ==================== QUIZAPP WAR ====================
+                    echo ================= QUIZAPP WAR =================
 
                     if not exist "%QUIZAPP_WAR%" (
-                        echo ERROR: QuizApp.war not found.
-                        echo Expected:
+                        echo ERROR: QuizApp.war not found:
                         echo %QUIZAPP_WAR%
                         exit /b 1
                     )
@@ -167,11 +182,10 @@ pipeline {
 
 
                     echo.
-                    echo ==================== APPZILLON SERVER WAR ====================
+                    echo ============ APPZILLON SERVER WAR ============
 
                     if not exist "%APPZILLON_SERVER_WAR%" (
-                        echo ERROR: AppzillonServer.war not found.
-                        echo Expected:
+                        echo ERROR: AppzillonServer.war not found:
                         echo %APPZILLON_SERVER_WAR%
                         exit /b 1
                     )
@@ -207,12 +221,14 @@ pipeline {
 
                     if errorlevel 1 (
                         echo.
-                        echo ERROR: Backend Maven build failed.
+                        echo ERROR: Maven build failed.
                         exit /b 1
                     )
 
                     echo.
-                    echo Backend build successful.
+                    echo ============================================
+                    echo BACKEND BUILD SUCCESSFUL
+                    echo ============================================
 
                     echo.
                     echo Generated JAR:
@@ -242,41 +258,79 @@ pipeline {
 
                     if errorlevel 1 (
                         echo.
-                        echo ERROR: Backend tests failed.
+                        echo ERROR: Tests failed.
                         exit /b 1
                     )
 
                     echo.
-                    echo Backend tests passed successfully.
+                    echo Tests completed successfully.
                 '''
             }
         }
 
 
         // =====================================================
-        // 5. VERIFY BACKEND JAR
+        // 5. COPY BACKEND JAR TO JENKINS STORAGE
         // =====================================================
 
-        stage('Verify Backend JAR') {
+        stage('Deploy Backend JAR') {
 
             steps {
 
                 echo '============================================'
-                echo 'VERIFYING BACKEND JAR'
+                echo 'COPYING BACKEND JAR'
                 echo '============================================'
 
                 bat '''
                     @echo off
 
-                    if not exist "%WORKSPACE%\\target\\*.jar" (
-                        echo ERROR: Backend JAR was not generated.
+                    echo.
+                    echo Searching for Spring Boot JAR...
+
+
+                    if not exist "%WORKSPACE%\\target\\quizapp-1.0.0.jar" (
+
+                        echo ERROR: Expected backend JAR not found:
+
+                        echo %WORKSPACE%\\target\\quizapp-1.0.0.jar
+
+                        echo.
+
+                        echo Available JAR files:
+
+                        dir "%WORKSPACE%\\target\\*.jar"
+
                         exit /b 1
-                    )
+                    }
+
 
                     echo.
-                    echo Backend JAR generated successfully.
+                    echo Copying backend JAR...
 
-                    dir "%WORKSPACE%\\target\\*.jar"
+
+                    copy /Y ^
+                        "%WORKSPACE%\\target\\quizapp-1.0.0.jar" ^
+                        "%BACKEND_DEPLOY_JAR%"
+
+
+                    if errorlevel 1 (
+
+                        echo ERROR: Backend JAR copy failed.
+
+                        exit /b 1
+                    }
+
+
+                    echo.
+                    echo ============================================
+                    echo BACKEND JAR COPIED SUCCESSFULLY
+                    echo ============================================
+
+
+                    echo.
+                    echo Backend JAR:
+
+                    dir "%BACKEND_DEPLOY_JAR%"
                 '''
             }
         }
@@ -301,13 +355,17 @@ pipeline {
                         -State Listen `
                         -ErrorAction SilentlyContinue
 
+
                     if ($connections) {
 
                         foreach ($connection in $connections) {
 
-                            $processId = $connection.OwningProcess
+                            $processId =
+                                $connection.OwningProcess
 
+                            Write-Host ""
                             Write-Host "Stopping backend PID: $processId"
+
 
                             Stop-Process `
                                 -Id $processId `
@@ -320,14 +378,15 @@ pipeline {
                         Write-Host "Backend is not currently running."
                     }
 
-                    Start-Sleep -Seconds 3
+
+                    Start-Sleep -Seconds 5
                 '''
             }
         }
 
 
         // =====================================================
-        // 7. START BACKEND
+        // 7. START BACKEND FROM JENKINS STORAGE
         // =====================================================
 
         stage('Start Backend') {
@@ -335,22 +394,16 @@ pipeline {
             steps {
 
                 echo '============================================'
-                echo 'STARTING BACKEND ON PORT 8020'
+                echo 'STARTING BACKEND'
                 echo '============================================'
 
                 powershell '''
 
-                    $jar = Get-ChildItem `
-                        "$env:WORKSPACE\\target\\*.jar" |
-                        Where-Object {
-                            $_.Name -notlike "*-plain.jar"
-                        } |
-                        Select-Object -First 1
+                    if (-not (Test-Path $env:BACKEND_DEPLOY_JAR)) {
 
+                        Write-Error "Backend JAR does not exist."
 
-                    if (-not $jar) {
-
-                        Write-Error "Backend JAR not found."
+                        Write-Host $env:BACKEND_DEPLOY_JAR
 
                         exit 1
                     }
@@ -358,39 +411,91 @@ pipeline {
 
                     Write-Host ""
                     Write-Host "Backend JAR:"
-                    Write-Host $jar.FullName
+                    Write-Host $env:BACKEND_DEPLOY_JAR
 
 
-                    if (Test-Path "C:\\JenkinsStorage\\backend.log") {
+                    if (Test-Path $env:BACKEND_LOG) {
 
                         Remove-Item `
-                            "C:\\JenkinsStorage\\backend.log" `
+                            $env:BACKEND_LOG `
                             -Force `
                             -ErrorAction SilentlyContinue
                     }
 
 
-                    if (Test-Path "C:\\JenkinsStorage\\backend-error.log") {
+                    if (Test-Path $env:BACKEND_ERROR_LOG) {
 
                         Remove-Item `
-                            "C:\\JenkinsStorage\\backend-error.log" `
+                            $env:BACKEND_ERROR_LOG `
                             -Force `
                             -ErrorAction SilentlyContinue
                     }
+
+
+                    Write-Host ""
+                    Write-Host "Starting Spring Boot..."
 
 
                     $process = Start-Process `
-                        -FilePath "java" `
-                        -ArgumentList "-jar", $jar.FullName, "--server.port=8020" `
-                        -WorkingDirectory $env:WORKSPACE `
-                        -RedirectStandardOutput "C:\\JenkinsStorage\\backend.log" `
-                        -RedirectStandardError "C:\\JenkinsStorage\\backend-error.log" `
+                        -FilePath "java.exe" `
+                        -ArgumentList @(
+                            "-jar",
+                            $env:BACKEND_DEPLOY_JAR,
+                            "--server.port=8020"
+                        ) `
+                        -WorkingDirectory $env:BACKEND_DEPLOY_DIR `
+                        -RedirectStandardOutput $env:BACKEND_LOG `
+                        -RedirectStandardError $env:BACKEND_ERROR_LOG `
                         -PassThru
 
 
                     Write-Host ""
-                    Write-Host "Backend started."
+                    Write-Host "Backend process started."
                     Write-Host "PID: $($process.Id)"
+
+
+                    Start-Sleep -Seconds 5
+
+
+                    $running = Get-Process `
+                        -Id $process.Id `
+                        -ErrorAction SilentlyContinue
+
+
+                    if (-not $running) {
+
+                        Write-Host ""
+                        Write-Host "============================================"
+                        Write-Host "BACKEND PROCESS EXITED"
+                        Write-Host "============================================"
+
+
+                        Write-Host ""
+                        Write-Host "========== BACKEND LOG =========="
+
+
+                        if (Test-Path $env:BACKEND_LOG) {
+
+                            Get-Content $env:BACKEND_LOG
+                        }
+
+
+                        Write-Host ""
+                        Write-Host "========== BACKEND ERROR LOG =========="
+
+
+                        if (Test-Path $env:BACKEND_ERROR_LOG) {
+
+                            Get-Content $env:BACKEND_ERROR_LOG
+                        }
+
+
+                        exit 1
+                    }
+
+
+                    Write-Host ""
+                    Write-Host "Backend process is running."
                 '''
             }
         }
@@ -408,14 +513,14 @@ pipeline {
                 echo 'CHECKING BACKEND'
                 echo '============================================'
 
-                timeout(time: 90, unit: 'SECONDS') {
+                timeout(time: 2, unit: 'MINUTES') {
 
                     powershell '''
 
                         $ready = $false
 
 
-                        for ($i = 0; $i -lt 18; $i++) {
+                        for ($i = 0; $i -lt 24; $i++) {
 
                             Write-Host ""
                             Write-Host "Checking backend attempt $($i + 1)..."
@@ -424,9 +529,9 @@ pipeline {
                             try {
 
                                 $response = Invoke-WebRequest `
-                                    -Uri "http://localhost:8020/api/topics" `
+                                    -Uri $env:BACKEND_URL `
                                     -UseBasicParsing `
-                                    -TimeoutSec 5
+                                    -TimeoutSec 10
 
 
                                 Write-Host "HTTP Status: $($response.StatusCode)"
@@ -453,25 +558,31 @@ pipeline {
 
                             Write-Host ""
                             Write-Host "============================================"
-                            Write-Host "BACKEND FAILED"
+                            Write-Host "BACKEND HEALTH CHECK FAILED"
                             Write-Host "============================================"
 
 
-                            if (Test-Path "C:\\JenkinsStorage\\backend.log") {
+                            Write-Host ""
+                            Write-Host "========== BACKEND LOG =========="
 
-                                Write-Host ""
-                                Write-Host "BACKEND LOG:"
+
+                            if (Test-Path $env:BACKEND_LOG) {
+
                                 Get-Content `
-                                    "C:\\JenkinsStorage\\backend.log"
+                                    $env:BACKEND_LOG `
+                                    -Tail 200
                             }
 
 
-                            if (Test-Path "C:\\JenkinsStorage\\backend-error.log") {
+                            Write-Host ""
+                            Write-Host "========== BACKEND ERROR LOG =========="
 
-                                Write-Host ""
-                                Write-Host "BACKEND ERROR LOG:"
+
+                            if (Test-Path $env:BACKEND_ERROR_LOG) {
+
                                 Get-Content `
-                                    "C:\\JenkinsStorage\\backend-error.log"
+                                    $env:BACKEND_ERROR_LOG `
+                                    -Tail 200
                             }
 
 
@@ -482,8 +593,10 @@ pipeline {
                         Write-Host ""
                         Write-Host "============================================"
                         Write-Host "BACKEND IS UP"
-                        Write-Host "http://localhost:8020/api/topics"
                         Write-Host "============================================"
+
+                        Write-Host ""
+                        Write-Host $env:BACKEND_URL
                     '''
                 }
             }
@@ -514,9 +627,13 @@ pipeline {
 
                         foreach ($connection in $connections) {
 
-                            $processId = $connection.OwningProcess
+                            $processId =
+                                $connection.OwningProcess
 
+
+                            Write-Host ""
                             Write-Host "Stopping Tomcat PID: $processId"
+
 
                             Stop-Process `
                                 -Id $processId `
@@ -537,7 +654,7 @@ pipeline {
 
 
         // =====================================================
-        // 10. CLEAN OLD DEPLOYMENT
+        // 10. CLEAN OLD TOMCAT DEPLOYMENT
         // =====================================================
 
         stage('Clean Old Deployment') {
@@ -545,24 +662,35 @@ pipeline {
             steps {
 
                 echo '============================================'
-                echo 'CLEANING OLD DEPLOYMENT'
+                echo 'CLEANING OLD TOMCAT DEPLOYMENT'
                 echo '============================================'
 
                 bat '''
                     @echo off
 
+
+                    echo Removing old QuizApp WAR...
+
                     if exist "%TOMCAT_WEBAPPS%\\QuizApp.war" (
                         del /F /Q "%TOMCAT_WEBAPPS%\\QuizApp.war"
                     )
+
+
+                    echo Removing old QuizApp directory...
 
                     if exist "%TOMCAT_WEBAPPS%\\QuizApp" (
                         rmdir /S /Q "%TOMCAT_WEBAPPS%\\QuizApp"
                     )
 
 
+                    echo Removing old AppzillonServer WAR...
+
                     if exist "%TOMCAT_WEBAPPS%\\AppzillonServer.war" (
                         del /F /Q "%TOMCAT_WEBAPPS%\\AppzillonServer.war"
                     )
+
+
+                    echo Removing old AppzillonServer directory...
 
                     if exist "%TOMCAT_WEBAPPS%\\AppzillonServer" (
                         rmdir /S /Q "%TOMCAT_WEBAPPS%\\AppzillonServer"
@@ -570,14 +698,14 @@ pipeline {
 
 
                     echo.
-                    echo Old deployment removed.
+                    echo Old deployment cleaned.
                 '''
             }
         }
 
 
         // =====================================================
-        // 11. COPY WAR FILES
+        // 11. COPY APPZILLON WAR FILES
         // =====================================================
 
         stage('Deploy Appzillon WARs') {
@@ -585,14 +713,16 @@ pipeline {
             steps {
 
                 echo '============================================'
-                echo 'COPYING APPZILLON WAR FILES'
+                echo 'DEPLOYING APPZILLON WAR FILES'
                 echo '============================================'
 
                 bat '''
                     @echo off
 
+
                     echo.
                     echo Copying AppzillonServer.war...
+
 
                     copy /Y ^
                         "%APPZILLON_SERVER_WAR%" ^
@@ -600,13 +730,16 @@ pipeline {
 
 
                     if errorlevel 1 (
+
                         echo ERROR: AppzillonServer.war copy failed.
+
                         exit /b 1
-                    )
+                    }
 
 
                     echo.
                     echo Copying QuizApp.war...
+
 
                     copy /Y ^
                         "%QUIZAPP_WAR%" ^
@@ -614,9 +747,11 @@ pipeline {
 
 
                     if errorlevel 1 (
+
                         echo ERROR: QuizApp.war copy failed.
+
                         exit /b 1
-                    )
+                    }
 
 
                     echo.
@@ -649,15 +784,20 @@ pipeline {
                 bat '''
                     @echo off
 
+
                     cd /d "%TOMCAT_HOME%\\bin"
+
 
                     set "JENKINS_NODE_COOKIE=dontKillMe"
 
+
                     start "Tomcat" /B cmd /c "catalina.bat start"
+
 
                     echo.
                     echo Tomcat start command sent.
                 '''
+
 
                 sleep(
                     time: 20,
@@ -679,26 +819,29 @@ pipeline {
                 echo 'CHECKING TOMCAT'
                 echo '============================================'
 
-                timeout(time: 90, unit: 'SECONDS') {
+                timeout(time: 2, unit: 'MINUTES') {
 
                     powershell '''
 
                         $ready = $false
 
 
-                        for ($i = 0; $i -lt 18; $i++) {
+                        for ($i = 0; $i -lt 24; $i++) {
 
                             Write-Host ""
                             Write-Host "Checking Tomcat attempt $($i + 1)..."
 
 
-                            $result = Test-NetConnection `
-                                -ComputerName "localhost" `
-                                -Port 8084 `
-                                -WarningAction SilentlyContinue
+                            $connection =
+                                Get-NetTCPConnection `
+                                    -LocalPort 8084 `
+                                    -State Listen `
+                                    -ErrorAction SilentlyContinue
 
 
-                            if ($result.TcpTestSucceeded) {
+                            if ($connection) {
+
+                                Write-Host "Tomcat is listening on port 8084."
 
                                 $ready = $true
 
@@ -718,6 +861,19 @@ pipeline {
                             Write-Host "============================================"
 
 
+                            Write-Host ""
+                            Write-Host "Tomcat logs:"
+
+
+                            if (Test-Path "$env:TOMCAT_HOME\\logs") {
+
+                                Get-ChildItem `
+                                    "$env:TOMCAT_HOME\\logs" |
+                                    Sort-Object LastWriteTime -Descending |
+                                    Select-Object -First 10
+                            }
+
+
                             exit 1
                         }
 
@@ -725,7 +881,6 @@ pipeline {
                         Write-Host ""
                         Write-Host "============================================"
                         Write-Host "TOMCAT IS RUNNING"
-                        Write-Host "PORT: 8084"
                         Write-Host "============================================"
                     '''
                 }
@@ -753,7 +908,7 @@ pipeline {
 
                     if (-not (Test-Path "$env:TOMCAT_WEBAPPS\\QuizApp.war")) {
 
-                        Write-Error "QuizApp.war does not exist."
+                        Write-Error "QuizApp.war is missing."
 
                         exit 1
                     }
@@ -768,7 +923,7 @@ pipeline {
 
                     if (-not (Test-Path "$env:TOMCAT_WEBAPPS\\AppzillonServer.war")) {
 
-                        Write-Error "AppzillonServer.war does not exist."
+                        Write-Error "AppzillonServer.war is missing."
 
                         exit 1
                     }
@@ -778,7 +933,8 @@ pipeline {
 
 
                     Write-Host ""
-                    Write-Host "Waiting for WAR extraction..."
+                    Write-Host "Waiting for Tomcat deployment..."
+
 
                     Start-Sleep -Seconds 20
 
@@ -793,7 +949,7 @@ pipeline {
 
                     } else {
 
-                        Write-Host "WARNING: QuizApp directory not extracted yet."
+                        Write-Host "WARNING: QuizApp directory not found yet."
                     }
 
 
@@ -807,7 +963,7 @@ pipeline {
 
                     } else {
 
-                        Write-Host "WARNING: AppzillonServer directory not extracted yet."
+                        Write-Host "WARNING: AppzillonServer directory not found yet."
                     }
                 '''
             }
@@ -826,28 +982,23 @@ pipeline {
                 echo 'CHECKING QUIZAPP FRONTEND'
                 echo '============================================'
 
-                timeout(time: 90, unit: 'SECONDS') {
+                timeout(time: 2, unit: 'MINUTES') {
 
                     powershell '''
 
                         $ready = $false
 
 
-                        for ($i = 0; $i -lt 18; $i++) {
+                        for ($i = 0; $i -lt 24; $i++) {
 
                             Write-Host ""
-                            Write-Host "Checking QuizApp frontend attempt $($i + 1)..."
+                            Write-Host "Checking QuizApp attempt $($i + 1)..."
 
-
-                            # -------------------------------------------------
-                            # Check the actual JSP in the QuizApp WAR.
-                            # The WAR contains QuizAp.jsp.
-                            # -------------------------------------------------
 
                             try {
 
                                 $response = Invoke-WebRequest `
-                                    -Uri "http://localhost:8084/QuizApp/QuizAp.jsp" `
+                                    -Uri $env:FRONTEND_PAGE_URL `
                                     -UseBasicParsing `
                                     -TimeoutSec 10
 
@@ -864,7 +1015,7 @@ pipeline {
 
                             } catch {
 
-                                Write-Host "QuizAp.jsp is not ready yet."
+                                Write-Host "QuizApp is not ready yet."
                             }
 
 
@@ -876,57 +1027,26 @@ pipeline {
 
                             Write-Host ""
                             Write-Host "============================================"
-                            Write-Host "QUIZAPP FRONTEND CHECK FAILED"
+                            Write-Host "QUIZAPP FRONTEND HEALTH CHECK FAILED"
                             Write-Host "============================================"
 
 
                             Write-Host ""
-                            Write-Host "Trying root URL..."
+                            Write-Host "Expected frontend:"
 
 
-                            try {
-
-                                $root = Invoke-WebRequest `
-                                    -Uri "http://localhost:8084/QuizApp/" `
-                                    -UseBasicParsing `
-                                    -TimeoutSec 10
-
-
-                                Write-Host "Root HTTP Status: $($root.StatusCode)"
-
-
-                                if ($root.StatusCode -eq 200) {
-
-                                    $ready = $true
-                                }
-
-                            } catch {
-
-                                Write-Host "Root URL also failed."
-                            }
-                        }
-
-
-                        if (-not $ready) {
-
-                            Write-Host ""
-                            Write-Host "============================================"
-                            Write-Host "FRONTEND IS NOT READY"
-                            Write-Host "============================================"
+                            Write-Host $env:FRONTEND_URL
 
 
                             Write-Host ""
-                            Write-Host "Expected URLs:"
+                            Write-Host "Application page:"
 
 
-                            Write-Host "http://localhost:8084/QuizApp/"
-
-
-                            Write-Host "http://localhost:8084/QuizApp/QuizAp.jsp"
+                            Write-Host $env:FRONTEND_PAGE_URL
 
 
                             Write-Host ""
-                            Write-Host "Tomcat logs:"
+                            Write-Host "Check Tomcat logs:"
 
 
                             Write-Host "$env:TOMCAT_HOME\\logs"
@@ -944,12 +1064,12 @@ pipeline {
 
                         Write-Host ""
                         Write-Host "Frontend:"
-                        Write-Host "http://localhost:8084/QuizApp/"
+                        Write-Host $env:FRONTEND_URL
 
 
                         Write-Host ""
-                        Write-Host "Application page:"
-                        Write-Host "http://localhost:8084/QuizApp/QuizAp.jsp"
+                        Write-Host "QuizApp page:"
+                        Write-Host $env:FRONTEND_PAGE_URL
                     '''
                 }
             }
@@ -957,7 +1077,7 @@ pipeline {
 
 
         // =====================================================
-        // 16. FINAL CHECK
+        // 16. FINAL SERVICE CHECK
         // =====================================================
 
         stage('Final Service Check') {
@@ -971,18 +1091,19 @@ pipeline {
                 powershell '''
 
                     Write-Host ""
-                    Write-Host "Checking Backend :8020..."
+                    Write-Host "Checking Backend port 8020..."
 
 
-                    $backend = Test-NetConnection `
-                        -ComputerName "localhost" `
-                        -Port 8020 `
-                        -WarningAction SilentlyContinue
+                    $backend =
+                        Get-NetTCPConnection `
+                            -LocalPort 8020 `
+                            -State Listen `
+                            -ErrorAction SilentlyContinue
 
 
-                    if (-not $backend.TcpTestSucceeded) {
+                    if (-not $backend) {
 
-                        Write-Error "Backend is not running."
+                        Write-Error "Backend is not listening on port 8020."
 
                         exit 1
                     }
@@ -992,18 +1113,19 @@ pipeline {
 
 
                     Write-Host ""
-                    Write-Host "Checking Tomcat :8084..."
+                    Write-Host "Checking Tomcat port 8084..."
 
 
-                    $tomcat = Test-NetConnection `
-                        -ComputerName "localhost" `
-                        -Port 8084 `
-                        -WarningAction SilentlyContinue
+                    $tomcat =
+                        Get-NetTCPConnection `
+                            -LocalPort 8084 `
+                            -State Listen `
+                            -ErrorAction SilentlyContinue
 
 
-                    if (-not $tomcat.TcpTestSucceeded) {
+                    if (-not $tomcat) {
 
-                        Write-Error "Tomcat is not running."
+                        Write-Error "Tomcat is not listening on port 8084."
 
                         exit 1
                     }
@@ -1013,24 +1135,54 @@ pipeline {
 
 
                     Write-Host ""
+                    Write-Host "Checking backend JAR..."
+
+
+                    if (-not (Test-Path $env:BACKEND_DEPLOY_JAR)) {
+
+                        Write-Error "Backend JAR missing from JenkinsStorage."
+
+                        exit 1
+                    }
+
+
+                    Write-Host "Backend JAR -> OK"
+
+
+                    Write-Host ""
+                    Write-Host "Checking QuizApp WAR..."
+
+
+                    if (-not (Test-Path $env:QUIZAPP_WAR)) {
+
+                        Write-Error "QuizApp.war missing."
+
+                        exit 1
+                    }
+
+
+                    Write-Host "QuizApp.war -> OK"
+
+
+                    Write-Host ""
+                    Write-Host "Checking AppzillonServer WAR..."
+
+
+                    if (-not (Test-Path $env:APPZILLON_SERVER_WAR)) {
+
+                        Write-Error "AppzillonServer.war missing."
+
+                        exit 1
+                    }
+
+
+                    Write-Host "AppzillonServer.war -> OK"
+
+
+                    Write-Host ""
                     Write-Host "============================================"
                     Write-Host "ALL SERVICES ARE RUNNING"
                     Write-Host "============================================"
-
-
-                    Write-Host ""
-                    Write-Host "Backend:"
-                    Write-Host "http://localhost:8020/api/topics"
-
-
-                    Write-Host ""
-                    Write-Host "Frontend:"
-                    Write-Host "http://localhost:8084/QuizApp/"
-
-
-                    Write-Host ""
-                    Write-Host "QuizApp page:"
-                    Write-Host "http://localhost:8084/QuizApp/QuizAp.jsp"
                 '''
             }
         }
@@ -1059,15 +1211,14 @@ http://localhost:8084/QuizApp/
 QuizApp page:
 http://localhost:8084/QuizApp/QuizAp.jsp
 
+Backend JAR:
+C:/JenkinsStorage/quizapp-1.0.0.jar
+
 QuizApp WAR:
 C:/JenkinsStorage/QuizApp.war
 
 AppzillonServer WAR:
 C:/JenkinsStorage/AppzillonServer.war
-
-Backend JAR:
-Generated inside Jenkins workspace
-NOT copied to JenkinsStorage.
 
 ============================================
 '''
@@ -1081,20 +1232,30 @@ NOT copied to JenkinsStorage.
 QUIZAPP CI/CD FAILED
 ============================================
 
-Check the failed stage in the Jenkins
-Console Output.
-
-Tomcat logs:
-
-D:/apache-tomcat-9.0.53-windows-x64/apache-tomcat-9.0.53/logs
+Check the failed stage above.
 
 Backend log:
-
 C:/JenkinsStorage/backend.log
 
 Backend error log:
-
 C:/JenkinsStorage/backend-error.log
+
+Tomcat logs:
+D:/apache-tomcat-9.0.53-windows-x64/apache-tomcat-9.0.53/logs
+
+============================================
+'''
+        }
+
+
+        aborted {
+
+            echo '''
+============================================
+QUIZAPP CI/CD ABORTED
+============================================
+
+The Jenkins pipeline was stopped or timed out.
 
 ============================================
 '''
@@ -1122,6 +1283,12 @@ C:/JenkinsStorage/backend-error.log
                 echo TOMCAT PORT 8084:
 
                 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8084 -ErrorAction SilentlyContinue | Format-Table -AutoSize"
+
+
+                echo.
+                echo JENKINS STORAGE:
+
+                dir "%STORAGE_DIR%" /A
 
 
                 echo.

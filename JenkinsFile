@@ -20,9 +20,9 @@ pipeline {
         TOMCAT_WEBAPPS =
             'D:/apache-tomcat-9.0.53-windows-x64/apache-tomcat-9.0.53/webapps'
 
-        FRONTEND_WAR = 'quizapp.war'
+        FRONTEND_WAR = 'QuizApp.war'
 
-        FRONTEND_CONTEXT = 'quizapp'
+        FRONTEND_CONTEXT = 'QuizApp'
     }
 
     stages {
@@ -32,7 +32,6 @@ pipeline {
             steps {
 
                 bat '''
-
                     "%JAVA_HOME%\\bin\\java.exe" -version
 
                     mvn clean package -DskipTests
@@ -44,6 +43,7 @@ pipeline {
                         exit /b 1
                     )
 
+                    echo Backend build successful.
                 '''
             }
         }
@@ -64,7 +64,10 @@ pipeline {
 
                 bat '''
 
+                    echo Checking port 8020...
+
                     for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8020 ^| findstr LISTENING') do (
+                        echo Stopping process %%a...
                         taskkill /F /PID %%a >nul 2>&1
                     )
 
@@ -93,7 +96,7 @@ pipeline {
                     start "QuizApp-Backend" /B cmd /c ^
                     "set JENKINS_NODE_COOKIE=dontKillMe && "%JAVA_HOME%\\bin\\java.exe" -jar "C:\\JenkinsStorage\\quizapp-1.0.0.jar" > "C:\\JenkinsStorage\\backend.log" 2>&1"
 
-                    ping 127.0.0.1 -n 6 >nul
+                    echo Backend started.
 
                 '''
             }
@@ -105,13 +108,29 @@ pipeline {
 
                 bat '''
 
-                    set RETRIES=20
+                    echo Waiting for backend...
+
+                    set RETRIES=30
 
                     :CHECK_BACKEND
 
-                    curl -s -o nul -w "%%{http_code}" "%HEALTH_URL%" | findstr "200 201"
+                    curl -s -o nul -w "%%{http_code}" "%HEALTH_URL%" > "%TEMP%\\quiz_health.txt"
 
-                    if not errorlevel 1 (
+                    set /p STATUS=<"%TEMP%\\quiz_health.txt"
+
+                    echo HTTP Status: %STATUS%
+
+                    if "%STATUS%"=="200" (
+                        echo BACKEND IS RUNNING
+                        exit /b 0
+                    )
+
+                    if "%STATUS%"=="201" (
+                        echo BACKEND IS RUNNING
+                        exit /b 0
+                    )
+
+                    if "%STATUS%"=="204" (
                         echo BACKEND IS RUNNING
                         exit /b 0
                     )
@@ -122,6 +141,10 @@ pipeline {
 
                         echo BACKEND HEALTH CHECK FAILED
 
+                        echo.
+                        echo Backend log:
+                        echo.
+
                         if exist "C:\\JenkinsStorage\\backend.log" (
                             type "C:\\JenkinsStorage\\backend.log"
                         )
@@ -129,7 +152,7 @@ pipeline {
                         exit /b 1
                     )
 
-                    ping 127.0.0.1 -n 4 >nul
+                    ping 127.0.0.1 -n 3 >nul
 
                     goto CHECK_BACKEND
 
@@ -143,35 +166,53 @@ pipeline {
 
                 bat '''
 
+                    echo Checking Appzillon WAR...
+
+                    if not exist "C:\\JenkinsStorage\\QuizApp.war" (
+                        echo ERROR: QuizApp.war not found in C:\\JenkinsStorage
+                        exit /b 1
+                    )
+
+                    echo WAR found.
+
+                    echo Stopping Tomcat...
+
                     call "%TOMCAT_HOME%\\bin\\shutdown.bat"
 
                     ping 127.0.0.1 -n 6 >nul
 
-                    if exist "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%" (
-                        del /F /Q "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%"
+                    echo Removing old WAR...
+
+                    if exist "%TOMCAT_WEBAPPS%\\QuizApp.war" (
+                        del /F /Q "%TOMCAT_WEBAPPS%\\QuizApp.war"
                     )
 
-                    if exist "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%" (
-                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%"
+                    echo Removing old application folder...
+
+                    if exist "%TOMCAT_WEBAPPS%\\QuizApp" (
+                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\QuizApp"
                     )
 
-                    if not exist "%WORKSPACE%\\%FRONTEND_WAR%" (
-                        echo ERROR: WAR file not found.
-                        exit /b 1
-                    )
+                    echo Copying Appzillon WAR...
 
                     copy /Y ^
-                    "%WORKSPACE%\\%FRONTEND_WAR%" ^
-                    "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%"
+                    "C:\\JenkinsStorage\\QuizApp.war" ^
+                    "%TOMCAT_WEBAPPS%\\QuizApp.war"
 
                     if errorlevel 1 (
                         echo ERROR: Failed to copy Appzillon WAR.
                         exit /b 1
                     )
 
+                    echo WAR deployed successfully.
+
+                    echo Starting Tomcat...
+
                     call "%TOMCAT_HOME%\\bin\\startup.bat"
 
-                    ping 127.0.0.1 -n 10 >nul
+                    echo Tomcat started.
+
+                    ping 127.0.0.1 -n 15 >nul
 
                 '''
             }
@@ -183,14 +224,16 @@ pipeline {
 
                 bat '''
 
-                    curl -I "http://localhost:8084/%FRONTEND_CONTEXT%/"
+                    echo Checking Appzillon frontend...
+
+                    curl -I "http://localhost:8084/QuizApp/"
 
                     if errorlevel 1 (
                         echo FRONTEND HEALTH CHECK FAILED
                         exit /b 1
                     )
 
-                    echo APPZILLON FRONTEND IS RUNNING
+                    echo APPZILLON FRONTEND IS RUNNING.
 
                 '''
             }
@@ -202,28 +245,39 @@ pipeline {
         success {
 
             echo '''
+==================================================
 QUIZAPP CI/CD PIPELINE SUCCESSFUL
+==================================================
 
 Backend:
 http://localhost:8020
 
 Frontend:
-http://localhost:8084/quizapp/
+http://localhost:8084/QuizApp/
 
 Backend JAR:
-C://Users/bhavyashri.hegde/Downloads/quizapp/target/quizapp-1.0.0.jar
+C:\\JenkinsStorage\\quizapp-1.0.0.jar
+
+Frontend WAR:
+C:\\JenkinsStorage\\QuizApp.war
 
 Backend Log:
 C:\\JenkinsStorage\\backend.log
+
+==================================================
 '''
         }
 
         failure {
 
             echo '''
+==================================================
 QUIZAPP CI/CD PIPELINE FAILED
+==================================================
 
 Check the Jenkins Console Output.
+
+==================================================
 '''
         }
     }

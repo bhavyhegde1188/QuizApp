@@ -183,7 +183,7 @@ pipeline {
 
                 bat '''
 
-                    curl -I "http://localhost:8080/%FRONTEND_CONTEXT%/"
+                    curl -I "http://localhost:8084/%FRONTEND_CONTEXT%/"
 
                     if errorlevel 1 (
                         echo FRONTEND HEALTH CHECK FAILED
@@ -208,7 +208,7 @@ Backend:
 http://localhost:8020
 
 Frontend:
-http://localhost:8080/quizapp/
+http://localhost:8084/quizapp/
 
 Backend JAR:
 C:\\JenkinsStorage\\quizapp-1.0.0.jar

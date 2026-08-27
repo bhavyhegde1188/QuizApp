@@ -851,7 +851,7 @@ pipeline {
                         echo quizapp.war was not deployed.
 
                         exit /b 1
-                    }
+                    )
 
 
                     echo quizapp.war -> OK
@@ -867,7 +867,7 @@ pipeline {
                         echo AppzillonServer.war was not deployed.
 
                         exit /b 1
-                    }
+                    )
 
 
                     echo AppzillonServer.war -> OK

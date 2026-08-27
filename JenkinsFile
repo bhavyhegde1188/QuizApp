@@ -364,20 +364,21 @@ pipeline {
 
                     Write-Host "Starting Spring Boot backend..."
 
+                    $env:JENKINS_NODE_COOKIE = "dontKillMe"
 
-                    $process = Start-Process `
-                        -FilePath "java.exe" `
-                        -ArgumentList "-jar `"$jar`"" `
+                    $startCommand =
+                        "start `"QuizAppBackend`" /b java.exe -jar `"$jar`" 1>>`"$log`" 2>>`"$errorLog`""
+
+                    Start-Process `
+                        -FilePath "cmd.exe" `
+                        -ArgumentList "/c", $startCommand `
                         -WorkingDirectory "C:\\JenkinsStorage\\QuizApp" `
-                        -RedirectStandardOutput $log `
-                        -RedirectStandardError $errorLog `
                         -WindowStyle Hidden `
-                        -PassThru
+                        -Wait
 
 
                     Write-Host ""
-                    Write-Host "Backend started."
-                    Write-Host "PID: $($process.Id)"
+                    Write-Host "Backend launch command completed."
 
 
                     Start-Sleep -Seconds 2

@@ -21,6 +21,8 @@ pipeline {
         FRONTEND_WAR = 'QuizApp.war'
 
         FRONTEND_CONTEXT = 'QuizApp'
+
+        FRONTEND_URL = 'http://localhost:8084/QuizApp/'
     }
 
     stages {
@@ -96,6 +98,26 @@ pipeline {
                     )
 
                     echo Deployment directory ready.
+                '''
+            }
+        }
+
+        stage('Verify Frontend WAR Present') {
+
+            steps {
+
+                bat '''
+                    echo ==========================================
+                    echo VERIFYING FRONTEND WAR
+                    echo ==========================================
+
+                    if not exist "C:\\JenkinsStorage\\%FRONTEND_WAR%" (
+                        echo ERROR: %FRONTEND_WAR% not found in C:\\JenkinsStorage.
+                        echo Copy the built Appzillon WAR there before running this pipeline.
+                        exit /b 1
+                    )
+
+                    echo Frontend WAR found: C:\\JenkinsStorage\\%FRONTEND_WAR%
                 '''
             }
         }
@@ -204,12 +226,12 @@ pipeline {
                     echo DEPLOYING APPZILLON FRONTEND
                     echo ==========================================
 
-                    if not exist "C:\\JenkinsStorage\\QuizApp.war" (
-                        echo ERROR: QuizApp.war not found.
+                    if not exist "C:\\JenkinsStorage\\%FRONTEND_WAR%" (
+                        echo ERROR: %FRONTEND_WAR% not found.
                         exit /b 1
                     )
 
-                    echo QuizApp.war found.
+                    echo %FRONTEND_WAR% found.
 
                     echo Stopping Tomcat...
 
@@ -219,21 +241,21 @@ pipeline {
 
                     echo Removing old QuizApp WAR...
 
-                    if exist "%TOMCAT_WEBAPPS%\\QuizApp.war" (
-                        del /F /Q "%TOMCAT_WEBAPPS%\\QuizApp.war"
+                    if exist "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%" (
+                        del /F /Q "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%"
                     )
 
                     echo Removing old QuizApp directory...
 
-                    if exist "%TOMCAT_WEBAPPS%\\QuizApp" (
-                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\QuizApp"
+                    if exist "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%" (
+                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%"
                     )
 
                     echo Copying new WAR...
 
                     copy /Y ^
-                    "C:\\JenkinsStorage\\QuizApp.war" ^
-                    "%TOMCAT_WEBAPPS%\\QuizApp.war"
+                    "C:\\JenkinsStorage\\%FRONTEND_WAR%" ^
+                    "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%"
 
                     if errorlevel 1 (
                         echo ERROR: WAR copy failed.
@@ -288,14 +310,33 @@ pipeline {
                     echo FRONTEND HEALTH CHECK
                     echo ==========================================
 
-                    curl -I "http://localhost:8084/QuizApp/"
+                    set RETRIES=15
 
-                    if errorlevel 1 (
-                        echo ERROR: QuizApp frontend is not accessible.
+                    :CHECK_FRONTEND
+
+                    curl -s -o nul -w "%%{http_code}" "%FRONTEND_URL%" > "%TEMP%\\quiz_frontend_status.txt"
+
+                    set /p FSTATUS=<"%TEMP%\\quiz_frontend_status.txt"
+
+                    echo Frontend HTTP Status: %FSTATUS%
+
+                    if "%FSTATUS%"=="200" (
+                        echo APPZILLON FRONTEND IS RUNNING.
+                        exit /b 0
+                    )
+
+                    set /a RETRIES-=1
+
+                    if %RETRIES% LEQ 0 (
+                        echo ERROR: QuizApp frontend returned status %FSTATUS% ^(expected 200^).
+                        echo Check the deployed WAR at %TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%
+                        echo and Tomcat logs under %TOMCAT_HOME%\\logs
                         exit /b 1
                     )
 
-                    echo APPZILLON FRONTEND IS RUNNING.
+                    ping 127.0.0.1 -n 3 >nul
+
+                    goto CHECK_FRONTEND
                 '''
             }
         }
@@ -304,19 +345,23 @@ pipeline {
 
             steps {
 
+                writeFile file: 'schedule-shutdown.bat', text: """@echo off
+timeout /t 10800 /nobreak >nul
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :${BACKEND_PORT} ^| findstr LISTENING') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
+call "${TOMCAT_HOME}\\bin\\shutdown.bat"
+"""
+
                 bat '''
                     echo ==========================================
                     echo SCHEDULING 3 HOUR SHUTDOWN
                     echo ==========================================
 
                     echo Backend and frontend will continue running.
-
                     echo They will be stopped automatically after 3 hours.
 
-                    start "QuizApp-Shutdown" /B cmd /c ^
-                    "timeout /t 10800 /nobreak >nul && ^
-                    for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8020 ^| findstr LISTENING') do taskkill /F /PID %%a >nul 2>&1 && ^
-                    call "%TOMCAT_HOME%\\bin\\shutdown.bat""
+                    start "QuizApp-Shutdown" /B cmd /c call "%WORKSPACE%\\schedule-shutdown.bat"
 
                     echo 3 hour shutdown scheduled successfully.
                 '''

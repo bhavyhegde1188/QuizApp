@@ -3,235 +3,315 @@ pipeline {
     agent any
 
     environment {
+
+        // =========================================================
+        // TOMCAT CONFIGURATION
+        // =========================================================
+
         TOMCAT_HOME = 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53'
+
         TOMCAT_BIN = 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\bin'
+
         TOMCAT_WEBAPPS = 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\webapps'
+
+
+        // =========================================================
+        // WAR FILE LOCATION
+        // =========================================================
 
         STORAGE = 'C:\\JenkinsStorage'
 
         QUIZAPP_WAR = 'C:\\JenkinsStorage\\QuizApp.war'
+
         APPZILLON_WAR = 'C:\\JenkinsStorage\\AppzillonServer.war'
 
+
+        // =========================================================
+        // APPLICATION URLS
+        // =========================================================
+
         BACKEND_URL = 'http://localhost:8020/api/topics'
+
         FRONTEND_URL = 'http://localhost:8084/QuizApp'
     }
 
+
     stages {
 
+
+        // =========================================================
+        // 1. CHECK WAR FILES
+        // =========================================================
+
         stage('Check WAR Files') {
+
             steps {
+
                 bat '''
                     @echo off
 
+                    echo.
                     echo ==========================================
                     echo CHECKING WAR FILES
                     echo ==========================================
 
                     if not exist "%QUIZAPP_WAR%" (
-                        echo ERROR: QuizApp.war not found
+                        echo ERROR: QuizApp.war was not found.
+                        echo Expected:
+                        echo %QUIZAPP_WAR%
                         exit /b 1
                     )
 
                     if not exist "%APPZILLON_WAR%" (
-                        echo ERROR: AppzillonServer.war not found
+                        echo ERROR: AppzillonServer.war was not found.
+                        echo Expected:
+                        echo %APPZILLON_WAR%
                         exit /b 1
                     )
 
-                    echo QuizApp.war found:
+                    echo.
+                    echo QuizApp.war found successfully.
                     dir "%QUIZAPP_WAR%"
 
                     echo.
-                    echo AppzillonServer.war found:
+                    echo AppzillonServer.war found successfully.
                     dir "%APPZILLON_WAR%"
+
+                    echo.
+                    echo WAR file check completed successfully.
                 '''
             }
         }
 
+
+        // =========================================================
+        // 2. STOP EXISTING TOMCAT
+        // =========================================================
+
         stage('Stop Tomcat') {
+
             steps {
+
                 bat '''
                     @echo off
 
+                    echo.
                     echo ==========================================
                     echo STOPPING TOMCAT
                     echo ==========================================
 
-                    if exist "%TOMCAT_BIN%\\shutdown.bat" (
-                        call "%TOMCAT_BIN%\\shutdown.bat"
-                    )
+                    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+                    "$p = Get-NetTCPConnection -LocalPort 8084 -State Listen -ErrorAction SilentlyContinue; ^
+                    if ($p) { ^
+                        Write-Host 'Tomcat is running. Stopping process...'; ^
+                        $ids = $p | Select-Object -ExpandProperty OwningProcess -Unique; ^
+                        foreach ($id in $ids) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue } ^
+                    } else { ^
+                        Write-Host 'Tomcat is not running.' ^
+                    }"
+
+                    echo.
+                    echo Waiting for Tomcat to stop...
 
                     timeout /t 5 /nobreak >nul
 
-                    echo Checking port 8084...
-
-                    netstat -ano | findstr :8084
-
-                    echo Stop stage completed.
+                    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+                    "$p = Get-NetTCPConnection -LocalPort 8084 -State Listen -ErrorAction SilentlyContinue; ^
+                    if ($p) { Write-Host 'WARNING: Port 8084 is still in use.' } ^
+                    else { Write-Host 'Tomcat stopped successfully.' }"
                 '''
             }
         }
 
+
+        // =========================================================
+        // 3. CLEAN OLD DEPLOYMENT
+        // =========================================================
+
         stage('Clean Old Deployment') {
+
             steps {
+
                 bat '''
                     @echo off
 
+                    echo.
                     echo ==========================================
                     echo CLEANING OLD DEPLOYMENT
                     echo ==========================================
 
                     if exist "%TOMCAT_WEBAPPS%\\QuizApp.war" (
+                        echo Removing old QuizApp.war...
                         del /F /Q "%TOMCAT_WEBAPPS%\\QuizApp.war"
                     )
 
                     if exist "%TOMCAT_WEBAPPS%\\QuizApp" (
+                        echo Removing old QuizApp directory...
                         rmdir /S /Q "%TOMCAT_WEBAPPS%\\QuizApp"
                     )
 
                     if exist "%TOMCAT_WEBAPPS%\\AppzillonServer.war" (
+                        echo Removing old AppzillonServer.war...
                         del /F /Q "%TOMCAT_WEBAPPS%\\AppzillonServer.war"
                     )
 
                     if exist "%TOMCAT_WEBAPPS%\\AppzillonServer" (
+                        echo Removing old AppzillonServer directory...
                         rmdir /S /Q "%TOMCAT_WEBAPPS%\\AppzillonServer"
                     )
 
-                    echo Old deployment removed.
+                    echo.
+                    echo Old deployment cleaned successfully.
                 '''
             }
         }
 
+
+        // =========================================================
+        // 4. COPY WAR FILES
+        // =========================================================
+
         stage('Copy WAR Files') {
+
             steps {
+
                 bat '''
                     @echo off
 
+                    echo.
                     echo ==========================================
                     echo COPYING WAR FILES
                     echo ==========================================
 
+                    echo.
+                    echo Copying QuizApp.war...
+
                     copy /Y "%QUIZAPP_WAR%" "%TOMCAT_WEBAPPS%\\QuizApp.war"
 
                     if errorlevel 1 (
-                        echo ERROR: Failed to copy QuizApp.war
+                        echo ERROR: QuizApp.war copy failed.
                         exit /b 1
                     )
+
+                    echo QuizApp.war copied successfully.
+
+                    echo.
+                    echo Copying AppzillonServer.war...
 
                     copy /Y "%APPZILLON_WAR%" "%TOMCAT_WEBAPPS%\\AppzillonServer.war"
 
                     if errorlevel 1 (
-                        echo ERROR: Failed to copy AppzillonServer.war
+                        echo ERROR: AppzillonServer.war copy failed.
                         exit /b 1
                     )
 
-                    echo.
-                    echo Files copied successfully.
+                    echo AppzillonServer.war copied successfully.
 
                     echo.
-                    echo Current webapps:
+                    echo ==========================================
+                    echo WAR FILES COPIED SUCCESSFULLY
+                    echo ==========================================
+
                     dir "%TOMCAT_WEBAPPS%" /A
                 '''
             }
         }
 
+
+        // =========================================================
+        // 5. START TOMCAT
+        // =========================================================
+
         stage('Start Tomcat') {
+
             steps {
+
                 bat '''
                     @echo off
 
+                    echo.
                     echo ==========================================
                     echo STARTING TOMCAT
                     echo ==========================================
 
-                    call "%TOMCAT_BIN%\\startup.bat"
+                    cd /d "%TOMCAT_BIN%"
+
+                    start "Tomcat" /B cmd /c "catalina.bat start"
 
                     echo.
-                    echo Waiting for Tomcat...
-                    timeout /t 15 /nobreak
+                    echo Tomcat start command sent.
 
                     echo.
-                    echo Checking port 8084...
+                    echo Waiting for Tomcat to start...
 
-                    netstat -ano | findstr :8084
+                    timeout /t 15 /nobreak >nul
+
+                    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+                    "$p = Get-NetTCPConnection -LocalPort 8084 -State Listen -ErrorAction SilentlyContinue; ^
+                    if ($p) { ^
+                        Write-Host 'Tomcat is running on port 8084.'; ^
+                        exit 0 ^
+                    } else { ^
+                        Write-Host 'Tomcat is NOT running on port 8084.'; ^
+                        exit 1 ^
+                    }"
 
                     if errorlevel 1 (
-                        echo ERROR: Tomcat is not listening on port 8084
+                        echo.
+                        echo ERROR: Tomcat failed to start.
+                        echo Check:
+                        echo %TOMCAT_HOME%\\logs
                         exit /b 1
                     )
 
-                    echo Tomcat is listening on port 8084.
+                    echo.
+                    echo Tomcat started successfully.
                 '''
             }
         }
 
-        stage('Wait For Deployment') {
+
+        // =========================================================
+        // 6. WAIT FOR QUIZAPP
+        // =========================================================
+
+        stage('Wait For QuizApp') {
+
             steps {
+
                 bat '''
                     @echo off
-
-                    echo ==========================================
-                    echo WAITING FOR QUIZAPP DEPLOYMENT
-                    echo ==========================================
-
-                    timeout /t 20 /nobreak
 
                     echo.
-                    echo Checking QuizApp deployment directory...
+                    echo ==========================================
+                    echo WAITING FOR QUIZAPP
+                    echo ==========================================
 
-                    if exist "%TOMCAT_WEBAPPS%\\QuizApp" (
-                        echo QuizApp directory exists.
-                    ) else (
-                        echo WARNING: QuizApp directory does not exist yet.
-                    )
+                    set RETRIES=24
+
+                    :CHECK_QUIZAPP
 
                     echo.
-                    echo Checking WAR:
+                    echo Checking:
+                    echo %FRONTEND_URL%
 
-                    if exist "%TOMCAT_WEBAPPS%\\QuizApp.war" (
-                        echo QuizApp.war exists.
-                    ) else (
-                        echo ERROR: QuizApp.war is missing.
-                        exit /b 1
-                    )
-                '''
-            }
-        }
-
-        stage('Verify Backend') {
-            steps {
-                bat '''
-                    @echo off
-
-                    echo ==========================================
-                    echo VERIFYING BACKEND
-                    echo ==========================================
-
-                    powershell -Command "try { $r=Invoke-WebRequest -Uri '%BACKEND_URL%' -UseBasicParsing -TimeoutSec 10; Write-Host 'Backend HTTP Status:' $r.StatusCode } catch { Write-Host 'Backend request failed:' $_.Exception.Message; exit 1 }"
-                '''
-            }
-        }
-
-        stage('Verify Frontend') {
-            steps {
-                bat '''
-                    @echo off
-
-                    echo ==========================================
-                    echo VERIFYING QUIZAPP FRONTEND
-                    echo ==========================================
-
-                    set RETRIES=12
-
-                    :CHECK_FRONTEND
-
-                    powershell -Command "try { $r=Invoke-WebRequest -Uri '%FRONTEND_URL%' -UseBasicParsing -TimeoutSec 5; Write-Host 'QuizApp HTTP Status:' $r.StatusCode; if ($r.StatusCode -ge 200 -and $r.StatusCode -lt 500) { exit 0 } else { exit 1 } } catch { Write-Host 'QuizApp not ready:' $_.Exception.Message; exit 1 }"
+                    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+                    "try { ^
+                        $r = Invoke-WebRequest -Uri '%FRONTEND_URL%' -UseBasicParsing -TimeoutSec 5; ^
+                        Write-Host 'QuizApp HTTP Status:' $r.StatusCode; ^
+                        if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } ^
+                    } catch { ^
+                        Write-Host 'QuizApp is not ready yet.'; ^
+                        exit 1 ^
+                    }"
 
                     if not errorlevel 1 (
                         echo.
                         echo ==========================================
                         echo QUIZAPP IS UP
                         echo ==========================================
-                        echo URL: %FRONTEND_URL%
+                        echo URL:
+                        echo %FRONTEND_URL%
                         exit /b 0
                     )
 
@@ -242,52 +322,158 @@ pipeline {
                         echo ==========================================
                         echo QUIZAPP FAILED TO START
                         echo ==========================================
+                        echo.
+                        echo Expected URL:
+                        echo %FRONTEND_URL%
+                        echo.
+                        echo Check Tomcat logs:
+                        echo %TOMCAT_HOME%\\logs
                         exit /b 1
                     )
 
                     echo.
-                    echo QuizApp not ready. Waiting 5 seconds...
+                    echo QuizApp not ready.
+                    echo Waiting 5 seconds...
+
                     timeout /t 5 /nobreak >nul
 
-                    goto CHECK_FRONTEND
+                    goto CHECK_QUIZAPP
                 '''
             }
         }
 
+
+        // =========================================================
+        // 7. VERIFY BACKEND
+        // =========================================================
+
+        stage('Verify Backend') {
+
+            steps {
+
+                bat '''
+                    @echo off
+
+                    echo.
+                    echo ==========================================
+                    echo VERIFYING BACKEND
+                    echo ==========================================
+
+                    echo Backend URL:
+                    echo %BACKEND_URL%
+
+                    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+                    "try { ^
+                        $r = Invoke-WebRequest -Uri '%BACKEND_URL%' -UseBasicParsing -TimeoutSec 10; ^
+                        Write-Host 'Backend HTTP Status:' $r.StatusCode; ^
+                        if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } ^
+                    } catch { ^
+                        Write-Host 'Backend request failed:' $_.Exception.Message; ^
+                        exit 1 ^
+                    }"
+
+                    if errorlevel 1 (
+                        echo.
+                        echo ERROR: Backend verification failed.
+                        exit /b 1
+                    )
+
+                    echo.
+                    echo Backend is UP.
+                '''
+            }
+        }
+
+
+        // =========================================================
+        // 8. FINAL FRONTEND CHECK
+        // =========================================================
+
+        stage('Final Frontend Check') {
+
+            steps {
+
+                bat '''
+                    @echo off
+
+                    echo.
+                    echo ==========================================
+                    echo FINAL FRONTEND CHECK
+                    echo ==========================================
+
+                    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+                    "try { ^
+                        $r = Invoke-WebRequest -Uri '%FRONTEND_URL%' -UseBasicParsing -TimeoutSec 10; ^
+                        Write-Host 'Frontend HTTP Status:' $r.StatusCode; ^
+                        if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } ^
+                    } catch { ^
+                        Write-Host 'Frontend request failed:' $_.Exception.Message; ^
+                        exit 1 ^
+                    }"
+
+                    if errorlevel 1 (
+                        echo.
+                        echo ERROR: Frontend is not responding with HTTP 200.
+                        exit /b 1
+                    )
+
+                    echo.
+                    echo ==========================================
+                    echo FRONTEND IS UP
+                    echo ==========================================
+
+                    echo URL:
+                    echo %FRONTEND_URL%
+                '''
+            }
+        }
     }
+
+
+    // =============================================================
+    // POST ACTIONS
+    // =============================================================
 
     post {
 
         success {
+
             echo '=========================================='
             echo 'PIPELINE SUCCESS'
             echo '=========================================='
+
             echo 'Backend : http://localhost:8020/api/topics'
             echo 'Frontend: http://localhost:8084/QuizApp'
         }
 
+
         failure {
+
             echo '=========================================='
             echo 'PIPELINE FAILED'
             echo '=========================================='
-            echo 'Check Tomcat logs:'
-            echo '%TOMCAT_HOME%\\logs'
+
+            echo 'Tomcat logs:'
+            echo 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\logs'
         }
 
+
         always {
+
             bat '''
                 @echo off
 
                 echo.
                 echo ==========================================
-                echo TOMCAT STATUS
+                echo FINAL TOMCAT STATUS
                 echo ==========================================
 
-                netstat -ano | findstr :8084
+                powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+                "Get-NetTCPConnection -LocalPort 8084 -ErrorAction SilentlyContinue | Format-Table -AutoSize"
 
                 echo.
                 echo ==========================================
-                echo WEBAPPS
+                echo TOMCAT WEBAPPS
                 echo ==========================================
 
                 dir "%TOMCAT_WEBAPPS%" /A

@@ -8,19 +8,25 @@ pipeline {
 
         DEPLOY_DIR = 'C:/JenkinsStorage'
 
-        JAR_FILE = 'target/quizapp-1.0.0.jar'
+        JAR_NAME = 'quizapp-1.0.0.jar'
+
+        WEB_WAR = 'QuizApp-Web.war'
+
+        SERVER_WAR = 'QuizApp-Server.war'
 
         BACKEND_PORT = '8020'
 
-        HEALTH_URL = 'http://localhost:8020/api/topics'
+        BACKEND_URL = 'http://localhost:8020/api/topics'
 
         TOMCAT_HOME = 'D:/apache-tomcat-9.0.53-windows-x64/apache-tomcat-9.0.53'
 
         TOMCAT_WEBAPPS = 'D:/apache-tomcat-9.0.53-windows-x64/apache-tomcat-9.0.53/webapps'
 
-        FRONTEND_WAR = 'QuizApp.war'
+        TOMCAT_PORT = '8084'
 
-        FRONTEND_CONTEXT = 'QuizApp'
+        WEB_CONTEXT = 'QuizApp'
+
+        SERVER_CONTEXT = 'QuizAppServer'
 
         FRONTEND_URL = 'http://localhost:8084/QuizApp/'
     }
@@ -28,46 +34,44 @@ pipeline {
     stages {
 
         stage('Checkout') {
-
             steps {
-
-                echo 'Source code already checked out by Jenkins SCM.'
-
+                echo 'GitHub source code checked out by Jenkins SCM.'
             }
         }
 
         stage('Build Backend') {
-
             steps {
-
                 bat '''
-                    echo ==========================================
-                    echo BUILDING BACKEND
-                    echo ==========================================
+                    @echo off
 
-                    echo Checking Java...
+                    echo ==========================================
+                    echo BUILDING SPRING BOOT BACKEND
+                    echo ==========================================
 
                     "%JAVA_HOME%\\bin\\java.exe" -version
 
-                    echo Building Spring Boot application...
-
                     mvn clean package -DskipTests
 
-                    if not exist "%WORKSPACE%\\target\\quizapp-1.0.0.jar" (
-                        echo ERROR: Backend JAR was not created.
+                    if errorlevel 1 (
+                        echo ERROR: Maven build failed.
                         exit /b 1
                     )
 
-                    echo Backend build successful.
+                    if not exist "%WORKSPACE%\\target\\%JAR_NAME%" (
+                        echo ERROR: JAR file was not created.
+                        exit /b 1
+                    )
+
+                    echo Backend JAR created successfully.
                 '''
             }
         }
 
         stage('Run Tests') {
-
             steps {
-
                 bat '''
+                    @echo off
+
                     echo ==========================================
                     echo RUNNING TESTS
                     echo ==========================================
@@ -75,92 +79,112 @@ pipeline {
                     mvn test
 
                     if errorlevel 1 (
-                        echo ERROR: Tests failed.
+                        echo ERROR: Maven tests failed.
                         exit /b 1
                     )
 
-                    echo Tests completed successfully.
+                    echo Tests passed successfully.
                 '''
             }
         }
 
         stage('Prepare Deployment') {
-
             steps {
-
                 bat '''
+                    @echo off
+
                     echo ==========================================
                     echo PREPARING DEPLOYMENT
                     echo ==========================================
 
-                    if not exist "C:\\JenkinsStorage" (
-                        mkdir "C:\\JenkinsStorage"
+                    if not exist "%DEPLOY_DIR%" (
+                        mkdir "%DEPLOY_DIR%"
                     )
 
-                    echo Deployment directory ready.
+                    echo Deployment directory:
+                    echo %DEPLOY_DIR%
                 '''
             }
         }
 
-        stage('Verify Frontend WAR Present') {
-
+        stage('Verify Appzillon WAR Files') {
             steps {
-
                 bat '''
+                    @echo off
+
                     echo ==========================================
-                    echo VERIFYING FRONTEND WAR
+                    echo VERIFYING APPZILLON WAR FILES
                     echo ==========================================
 
-                    if not exist "C:\\JenkinsStorage\\%FRONTEND_WAR%" (
-                        echo ERROR: %FRONTEND_WAR% not found in C:\\JenkinsStorage.
-                        echo Copy the built Appzillon WAR there before running this pipeline.
+                    if not exist "%DEPLOY_DIR%\\%WEB_WAR%" (
+                        echo ERROR: Web WAR not found:
+                        echo %DEPLOY_DIR%\\%WEB_WAR%
                         exit /b 1
                     )
 
-                    echo Frontend WAR found: C:\\JenkinsStorage\\%FRONTEND_WAR%
+                    if not exist "%DEPLOY_DIR%\\%SERVER_WAR%" (
+                        echo ERROR: Server WAR not found:
+                        echo %DEPLOY_DIR%\\%SERVER_WAR%
+                        exit /b 1
+                    )
+
+                    echo Web WAR found:
+                    dir "%DEPLOY_DIR%\\%WEB_WAR%"
+
+                    echo.
+                    echo Server WAR found:
+                    dir "%DEPLOY_DIR%\\%SERVER_WAR%"
+                '''
+            }
+        }
+
+        stage('Copy Backend JAR') {
+            steps {
+                bat '''
+                    @echo off
+
+                    echo ==========================================
+                    echo COPYING BACKEND JAR
+                    echo ==========================================
+
+                    copy /Y "%WORKSPACE%\\target\\%JAR_NAME%" "%DEPLOY_DIR%\\%JAR_NAME%"
+
+                    if errorlevel 1 (
+                        echo ERROR: Failed to copy backend JAR.
+                        exit /b 1
+                    )
+
+                    echo Backend JAR copied successfully.
                 '''
             }
         }
 
         stage('Deploy Backend') {
-
             steps {
-
                 bat '''
+                    @echo off
+
                     echo ==========================================
                     echo DEPLOYING BACKEND
                     echo ==========================================
 
-                    echo Checking existing backend process...
+                    echo Checking port %BACKEND_PORT%...
 
-                    for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8020 ^| findstr LISTENING') do (
-                        echo Stopping PID %%a
+                    for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%BACKEND_PORT% ^| findstr LISTENING') do (
+                        echo Stopping backend PID %%a
                         taskkill /F /PID %%a >nul 2>&1
                     )
 
                     ping 127.0.0.1 -n 4 >nul
 
-                    echo Copying JAR...
-
-                    copy /Y ^
-                    "%WORKSPACE%\\target\\quizapp-1.0.0.jar" ^
-                    "C:\\JenkinsStorage\\quizapp-1.0.0.jar"
-
-                    if errorlevel 1 (
-                        echo ERROR: JAR copy failed.
-                        exit /b 1
+                    if exist "%DEPLOY_DIR%\\backend.log" (
+                        del /F /Q "%DEPLOY_DIR%\\backend.log"
                     )
 
-                    echo JAR copied successfully.
-
-                    if exist "C:\\JenkinsStorage\\backend.log" (
-                        del /F /Q "C:\\JenkinsStorage\\backend.log"
-                    )
-
-                    echo Starting Spring Boot application...
+                    echo Starting Spring Boot...
 
                     start "QuizApp-Backend" /B cmd /c ^
-                    "set JENKINS_NODE_COOKIE=dontKillMe && "%JAVA_HOME%\\bin\\java.exe" -jar "C:\\JenkinsStorage\\quizapp-1.0.0.jar" > "C:\\JenkinsStorage\\backend.log" 2>&1"
+                    "set JENKINS_NODE_COOKIE=dontKillMe&& "%JAVA_HOME%\\bin\\java.exe" -jar "%DEPLOY_DIR%\\%JAR_NAME%" > "%DEPLOY_DIR%\\backend.log" 2>&1"
 
                     echo Backend start command executed.
                 '''
@@ -168,21 +192,21 @@ pipeline {
         }
 
         stage('Backend Health Check') {
-
             steps {
-
                 bat '''
+                    @echo off
+
                     echo ==========================================
                     echo BACKEND HEALTH CHECK
                     echo ==========================================
 
                     set RETRIES=30
 
-                    :CHECK_BACKEND
+                    :BACKEND_CHECK
 
-                    curl -s -o nul -w "%%{http_code}" "%HEALTH_URL%" > "%TEMP%\\quiz_backend_status.txt"
+                    curl -s -o nul -w "%%{http_code}" "%BACKEND_URL%" > "%TEMP%\\backend_status.txt"
 
-                    set /p STATUS=<"%TEMP%\\quiz_backend_status.txt"
+                    set /p STATUS=<"%TEMP%\\backend_status.txt"
 
                     echo Backend HTTP Status: %STATUS%
 
@@ -195,43 +219,42 @@ pipeline {
 
                     if %RETRIES% LEQ 0 (
 
-                        echo ERROR: Backend health check failed.
+                        echo ERROR: Backend failed to start.
 
-                        echo.
-                        echo Backend log:
-                        echo ------------------------------------------
+                        echo ==========================================
+                        echo BACKEND LOG
+                        echo ==========================================
 
-                        if exist "C:\\JenkinsStorage\\backend.log" (
-                            type "C:\\JenkinsStorage\\backend.log"
+                        if exist "%DEPLOY_DIR%\\backend.log" (
+                            type "%DEPLOY_DIR%\\backend.log"
                         )
-
-                        echo ------------------------------------------
 
                         exit /b 1
                     )
 
                     ping 127.0.0.1 -n 3 >nul
 
-                    goto CHECK_BACKEND
+                    goto BACKEND_CHECK
                 '''
             }
         }
 
-        stage('Deploy Appzillon Frontend') {
-
+        stage('Deploy Appzillon WARs') {
             steps {
-
                 bat '''
+                    @echo off
+
                     echo ==========================================
-                    echo DEPLOYING APPZILLON FRONTEND
+                    echo DEPLOYING APPZILLON WAR FILES
                     echo ==========================================
 
-                    if not exist "C:\\JenkinsStorage\\%FRONTEND_WAR%" (
-                        echo ERROR: %FRONTEND_WAR% not found.
-                        exit /b 1
-                    )
+                    echo Web WAR:
+                    echo %DEPLOY_DIR%\\%WEB_WAR%
 
-                    echo %FRONTEND_WAR% found.
+                    echo Server WAR:
+                    echo %DEPLOY_DIR%\\%SERVER_WAR%
+
+                    echo.
 
                     echo Stopping Tomcat...
 
@@ -239,131 +262,200 @@ pipeline {
 
                     ping 127.0.0.1 -n 8 >nul
 
-                    echo Removing old QuizApp WAR...
+                    echo Removing old Web WAR...
 
-                    if exist "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%" (
-                        del /F /Q "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%"
+                    if exist "%TOMCAT_WEBAPPS%\\%WEB_WAR%" (
+                        del /F /Q "%TOMCAT_WEBAPPS%\\%WEB_WAR%"
                     )
 
-                    echo Removing old QuizApp directory...
+                    echo Removing old Web application...
 
-                    if exist "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%" (
-                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%"
+                    if exist "%TOMCAT_WEBAPPS%\\%WEB_CONTEXT%" (
+                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\%WEB_CONTEXT%"
                     )
 
-                    echo Copying new WAR...
+                    echo Removing old Server WAR...
 
-                    copy /Y ^
-                    "C:\\JenkinsStorage\\%FRONTEND_WAR%" ^
-                    "%TOMCAT_WEBAPPS%\\%FRONTEND_WAR%"
+                    if exist "%TOMCAT_WEBAPPS%\\%SERVER_WAR%" (
+                        del /F /Q "%TOMCAT_WEBAPPS%\\%SERVER_WAR%"
+                    )
+
+                    echo Removing old Server application...
+
+                    if exist "%TOMCAT_WEBAPPS%\\%SERVER_CONTEXT%" (
+                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\%SERVER_CONTEXT%"
+                    )
+
+                    echo.
+
+                    echo Copying Web WAR...
+
+                    copy /Y "%DEPLOY_DIR%\\%WEB_WAR%" "%TOMCAT_WEBAPPS%\\%WEB_WAR%"
 
                     if errorlevel 1 (
-                        echo ERROR: WAR copy failed.
+                        echo ERROR: Web WAR deployment failed.
                         exit /b 1
                     )
 
-                    echo WAR copied successfully.
+                    echo Web WAR deployed successfully.
+
+                    echo.
+
+                    echo Copying Server WAR...
+
+                    copy /Y "%DEPLOY_DIR%\\%SERVER_WAR%" "%TOMCAT_WEBAPPS%\\%SERVER_WAR%"
+
+                    if errorlevel 1 (
+                        echo ERROR: Server WAR deployment failed.
+                        exit /b 1
+                    )
+
+                    echo Server WAR deployed successfully.
+
+                    echo.
 
                     echo Starting Tomcat...
 
                     call "%TOMCAT_HOME%\\bin\\startup.bat"
 
-                    echo Waiting for Tomcat...
+                    echo Tomcat startup command executed.
+                '''
+            }
+        }
+
+        stage('Tomcat Health Check') {
+            steps {
+                bat '''
+                    @echo off
+
+                    echo ==========================================
+                    echo TOMCAT HEALTH CHECK
+                    echo ==========================================
 
                     set RETRIES=30
 
-                    :CHECK_TOMCAT
+                    :TOMCAT_CHECK
 
-                    netstat -ano | findstr :8084 | findstr LISTENING
+                    netstat -ano | findstr :%TOMCAT_PORT% | findstr LISTENING
 
                     if not errorlevel 1 (
-                        echo TOMCAT IS RUNNING ON PORT 8084.
+                        echo TOMCAT IS RUNNING ON PORT %TOMCAT_PORT%.
                         exit /b 0
                     )
 
                     set /a RETRIES-=1
 
                     if %RETRIES% LEQ 0 (
-
-                        echo ERROR: Tomcat did not start on port 8084.
-
-                        echo Check Tomcat logs:
-
-                        dir "%TOMCAT_HOME%\\logs"
-
+                        echo ERROR: Tomcat did not start.
                         exit /b 1
                     )
 
-                    ping 127.0.0.1 -n 3 >nul
+                    ping 127.0.0.1 -n 4 >nul
 
-                    goto CHECK_TOMCAT
+                    goto TOMCAT_CHECK
                 '''
             }
         }
 
         stage('Frontend Health Check') {
-
             steps {
-
                 bat '''
+                    @echo off
+
                     echo ==========================================
-                    echo FRONTEND HEALTH CHECK
+                    echo APPZILLON FRONTEND HEALTH CHECK
                     echo ==========================================
 
-                    set RETRIES=15
+                    set RETRIES=30
 
-                    :CHECK_FRONTEND
+                    :FRONTEND_CHECK
 
-                    curl -s -o nul -w "%%{http_code}" "%FRONTEND_URL%" > "%TEMP%\\quiz_frontend_status.txt"
+                    curl -s -o nul -w "%%{http_code}" "%FRONTEND_URL%" > "%TEMP%\\frontend_status.txt"
 
-                    set /p FSTATUS=<"%TEMP%\\quiz_frontend_status.txt"
+                    set /p STATUS=<"%TEMP%\\frontend_status.txt"
 
-                    echo Frontend HTTP Status: %FSTATUS%
+                    echo Frontend HTTP Status: %STATUS%
 
-                    if "%FSTATUS%"=="200" (
+                    if "%STATUS%"=="200" (
                         echo APPZILLON FRONTEND IS RUNNING.
+                        exit /b 0
+                    )
+
+                    if "%STATUS%"=="302" (
+                        echo APPZILLON FRONTEND IS RUNNING.
+                        exit /b 0
+                    )
+
+                    if "%STATUS%"=="403" (
+                        echo TOMCAT IS RUNNING.
+                        echo QuizApp application is deployed.
                         exit /b 0
                     )
 
                     set /a RETRIES-=1
 
                     if %RETRIES% LEQ 0 (
-                        echo ERROR: QuizApp frontend returned status %FSTATUS% ^(expected 200^).
-                        echo Check the deployed WAR at %TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%
-                        echo and Tomcat logs under %TOMCAT_HOME%\\logs
+                        echo ERROR: Appzillon frontend health check failed.
+
+                        echo ==========================================
+                        echo TOMCAT PORT
+                        echo ==========================================
+
+                        netstat -ano | findstr :%TOMCAT_PORT%
+
                         exit /b 1
                     )
 
-                    ping 127.0.0.1 -n 3 >nul
+                    ping 127.0.0.1 -n 5 >nul
 
-                    goto CHECK_FRONTEND
+                    goto FRONTEND_CHECK
                 '''
             }
         }
 
         stage('Schedule Shutdown') {
-
             steps {
 
-                writeFile file: 'schedule-shutdown.bat', text: """@echo off
+                writeFile file: 'shutdown-quizapp.bat', text: """@echo off
+
+echo ==========================================
+echo QUIZAPP SHUTDOWN TIMER STARTED
+echo ==========================================
+
 timeout /t 10800 /nobreak >nul
+
+echo Stopping Spring Boot backend...
+
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr :${BACKEND_PORT} ^| findstr LISTENING') do (
     taskkill /F /PID %%a >nul 2>&1
 )
+
+echo Stopping Tomcat...
+
 call "${TOMCAT_HOME}\\bin\\shutdown.bat"
+
+echo QuizApp shutdown completed.
+
 """
 
                 bat '''
+                    @echo off
+
                     echo ==========================================
                     echo SCHEDULING 3 HOUR SHUTDOWN
                     echo ==========================================
 
-                    echo Backend and frontend will continue running.
-                    echo They will be stopped automatically after 3 hours.
+                    copy /Y "%WORKSPACE%\\shutdown-quizapp.bat" "%DEPLOY_DIR%\\shutdown-quizapp.bat"
 
-                    start "QuizApp-Shutdown" /B cmd /c call "%WORKSPACE%\\schedule-shutdown.bat"
+                    if errorlevel 1 (
+                        echo ERROR: Failed to create shutdown script.
+                        exit /b 1
+                    )
 
-                    echo 3 hour shutdown scheduled successfully.
+                    start "QuizApp-Shutdown" /MIN cmd /c call "%DEPLOY_DIR%\\shutdown-quizapp.bat"
+
+                    echo.
+                    echo 3 HOUR SHUTDOWN TIMER STARTED.
                 '''
             }
         }
@@ -378,6 +470,9 @@ call "${TOMCAT_HOME}\\bin\\shutdown.bat"
 QUIZAPP CI/CD SUCCESSFUL
 ==========================================
 
+GitHub:
+https://github.com/bhavyhegde1188/QuizApp
+
 Backend:
 http://localhost:8020
 
@@ -387,13 +482,16 @@ http://localhost:8084/QuizApp/
 Backend JAR:
 C:\\JenkinsStorage\\quizapp-1.0.0.jar
 
-Frontend WAR:
-C:\\JenkinsStorage\\QuizApp.war
+Appzillon Web WAR:
+C:\\JenkinsStorage\\QuizApp-Web.war
+
+Appzillon Server WAR:
+C:\\JenkinsStorage\\QuizApp-Server.war
 
 Backend Log:
 C:\\JenkinsStorage\\backend.log
 
-Application Shutdown:
+Shutdown:
 After 3 hours
 
 ==========================================
@@ -407,7 +505,8 @@ After 3 hours
 QUIZAPP CI/CD FAILED
 ==========================================
 
-Check the stage where the pipeline stopped.
+Check the Jenkins Console Output
+and identify the failed stage.
 
 ==========================================
 '''

@@ -582,7 +582,7 @@ pipeline {
 
                 bat '''
 
-                    call "%TOMCAT_HOME%\\bin\\shutdown.bat"
+                    call "%TOMCAT_HOME%\\bin\\shutdown.bat" >nul 2>&1 || echo Tomcat was not running; continuing.
 
                     echo Waiting for Tomcat to stop...
 
@@ -615,27 +615,27 @@ pipeline {
 
                     if exist "%TOMCAT_WEBAPPS%\\quizapp.war" (
                         del /F /Q "%TOMCAT_WEBAPPS%\\quizapp.war"
-                    }
+                    )
 
 
                     if exist "%TOMCAT_WEBAPPS%\\AppzillonServer.war" (
                         del /F /Q "%TOMCAT_WEBAPPS%\\AppzillonServer.war"
-                    }
+                    )
 
 
                     if exist "%TOMCAT_WEBAPPS%\\QuizApp" (
                         rmdir /S /Q "%TOMCAT_WEBAPPS%\\QuizApp"
-                    }
+                    )
 
 
                     if exist "%TOMCAT_WEBAPPS%\\quizapp" (
                         rmdir /S /Q "%TOMCAT_WEBAPPS%\\quizapp"
-                    }
+                    )
 
 
                     if exist "%TOMCAT_WEBAPPS%\\AppzillonServer" (
                         rmdir /S /Q "%TOMCAT_WEBAPPS%\\AppzillonServer"
-                    }
+                    )
 
 
                     echo.

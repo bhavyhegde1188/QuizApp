@@ -4,7 +4,7 @@ pipeline {
 
     options {
         skipDefaultCheckout(true)
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 10, unit: 'MINUTES')
     }
 
     environment {
@@ -586,9 +586,7 @@ pipeline {
 
                     echo Waiting for Tomcat to stop...
 
-                    powershell.exe `
-                        -NoProfile `
-                        -Command "Start-Sleep -Seconds 10"
+                    powershell.exe -NoProfile -Command "Start-Sleep -Seconds 10"
 
                     echo Tomcat stop completed.
                 '''
@@ -821,9 +819,7 @@ pipeline {
 
                 bat '''
 
-                    powershell.exe `
-                        -NoProfile `
-                        -Command "Start-Sleep -Seconds 20"
+                    powershell.exe -NoProfile -Command "Start-Sleep -Seconds 20"
 
                     echo Appzillon deployment wait completed.
                 '''

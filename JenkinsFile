@@ -674,7 +674,7 @@ pipeline {
                         echo QuizApp.war deployment failed.
 
                         exit /b 1
-                    }
+                    )
 
 
                     echo QuizApp.war deployed successfully.
@@ -695,7 +695,7 @@ pipeline {
                         echo AppzillonServer.war deployment failed.
 
                         exit /b 1
-                    }
+                    )
 
 
                     echo AppzillonServer.war deployed successfully.

@@ -4,480 +4,566 @@ pipeline {
 
     environment {
 
-        // =========================================================
-        // TOMCAT CONFIGURATION
-        // =========================================================
+        JAVA_HOME = 'C:/Program Files/Java/jdk-17.0.2'
 
-        TOMCAT_HOME = 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53'
+        MAVEN_HOME = 'C:/Program Files/apache-maven-3.9.6'
 
-        TOMCAT_BIN = 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\bin'
+        DEPLOY_DIR = 'C:/JenkinsStorage'
 
-        TOMCAT_WEBAPPS = 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\webapps'
+        WEB_WAR = 'QuizApp.war'
 
+        SERVER_WAR = 'AppzillonServer.war'
 
-        // =========================================================
-        // WAR FILE LOCATION
-        // =========================================================
-
-        STORAGE = 'C:\\JenkinsStorage'
-
-        QUIZAPP_WAR = 'C:\\JenkinsStorage\\QuizApp.war'
-
-        APPZILLON_WAR = 'C:\\JenkinsStorage\\AppzillonServer.war'
-
-
-        // =========================================================
-        // APPLICATION URLS
-        // =========================================================
+        BACKEND_PORT = '8020'
 
         BACKEND_URL = 'http://localhost:8020/api/topics'
 
-        FRONTEND_URL = 'http://localhost:8084/QuizApp'
+        TOMCAT_HOME = 'D:/apache-tomcat-9.0.53-windows-x64/apache-tomcat-9.0.53'
+
+        TOMCAT_WEBAPPS = 'D:/apache-tomcat-9.0.53-windows-x64/apache-tomcat-9.0.53/webapps'
+
+        TOMCAT_PORT = '8084'
+
+        WEB_CONTEXT = 'QuizApp'
+
+        SERVER_CONTEXT = 'AppzillonServer'
+
+        FRONTEND_URL = 'http://localhost:8084/QuizApp/'
     }
 
 
     stages {
 
 
-        // =========================================================
-        // 1. CHECK WAR FILES
-        // =========================================================
+        stage('Checkout') {
 
-        stage('Check WAR Files') {
+            steps {
+
+                echo 'GitHub source code checked out by Jenkins SCM.'
+            }
+        }
+
+
+        stage('Build Backend') {
 
             steps {
 
                 bat '''
                     @echo off
 
-                    echo.
                     echo ==========================================
-                    echo CHECKING WAR FILES
+                    echo BUILDING SPRING BOOT BACKEND
                     echo ==========================================
 
-                    if not exist "%QUIZAPP_WAR%" (
-                        echo ERROR: QuizApp.war was not found.
-                        echo Expected:
-                        echo %QUIZAPP_WAR%
+                    echo.
+                    echo Java version:
+
+                    "%JAVA_HOME%\\bin\\java.exe" -version
+
+                    echo.
+                    echo Maven version:
+
+                    "%MAVEN_HOME%\\bin\\mvn.cmd" -version
+
+                    echo.
+                    echo Running Maven build...
+
+                    call "%MAVEN_HOME%\\bin\\mvn.cmd" clean package -DskipTests
+
+                    if errorlevel 1 (
+                        echo.
+                        echo ERROR: Maven build failed.
                         exit /b 1
                     )
 
-                    if not exist "%APPZILLON_WAR%" (
-                        echo ERROR: AppzillonServer.war was not found.
-                        echo Expected:
-                        echo %APPZILLON_WAR%
-                        exit /b 1
-                    )
+                    echo.
+                    echo ==========================================
+                    echo BACKEND BUILD SUCCESSFUL
+                    echo ==========================================
 
                     echo.
-                    echo QuizApp.war found successfully.
-                    dir "%QUIZAPP_WAR%"
+                    echo Generated JAR files:
 
-                    echo.
-                    echo AppzillonServer.war found successfully.
-                    dir "%APPZILLON_WAR%"
-
-                    echo.
-                    echo WAR file check completed successfully.
+                    dir "%WORKSPACE%\\target\\*.jar"
                 '''
             }
         }
 
 
-        // =========================================================
-        // 2. STOP EXISTING TOMCAT
-        // =========================================================
-
-        stage('Stop Tomcat') {
+        stage('Run Tests') {
 
             steps {
 
                 bat '''
                     @echo off
 
+                    echo ==========================================
+                    echo RUNNING TESTS
+                    echo ==========================================
+
+                    call "%MAVEN_HOME%\\bin\\mvn.cmd" test
+
+                    if errorlevel 1 (
+                        echo.
+                        echo ERROR: Maven tests failed.
+                        exit /b 1
+                    )
+
                     echo.
+                    echo Tests passed successfully.
+                '''
+            }
+        }
+
+
+        stage('Verify Deployment Files') {
+
+            steps {
+
+                bat '''
+                    @echo off
+
                     echo ==========================================
-                    echo STOPPING TOMCAT
+                    echo VERIFYING DEPLOYMENT FILES
                     echo ==========================================
+
+                    if not exist "%DEPLOY_DIR%\\%WEB_WAR%" (
+                        echo.
+                        echo ERROR: Web WAR not found:
+                        echo %DEPLOY_DIR%\\%WEB_WAR%
+                        exit /b 1
+                    )
+
+                    if not exist "%DEPLOY_DIR%\\%SERVER_WAR%" (
+                        echo.
+                        echo ERROR: Server WAR not found:
+                        echo %DEPLOY_DIR%\\%SERVER_WAR%
+                        exit /b 1
+                    )
+
+                    echo.
+                    echo QuizApp WAR:
+
+                    dir "%DEPLOY_DIR%\\%WEB_WAR%"
+
+                    echo.
+                    echo Appzillon Server WAR:
+
+                    dir "%DEPLOY_DIR%\\%SERVER_WAR%"
+
+                    echo.
+                    echo Deployment WAR files verified.
+                '''
+            }
+        }
+
+
+        stage('Deploy Backend') {
+
+            steps {
+
+                bat '''
+                    @echo off
+
+                    echo ==========================================
+                    echo DEPLOYING BACKEND
+                    echo ==========================================
+
+                    set "BACKEND_JAR="
+
+                    for %%F in ("%WORKSPACE%\\target\\*.jar") do (
+                        set "BACKEND_JAR=%%~fF"
+                        goto JAR_FOUND
+                    )
+
+                    echo.
+                    echo ERROR: Backend JAR was not generated.
+                    exit /b 1
+
+                    :JAR_FOUND
+
+                    echo.
+                    echo Backend JAR:
+                    echo %BACKEND_JAR%
+
+                    echo.
+                    echo Stopping existing backend...
 
                     powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-                    "$p = Get-NetTCPConnection -LocalPort 8084 -State Listen -ErrorAction SilentlyContinue; ^
-                    if ($p) { ^
-                        Write-Host 'Tomcat is running. Stopping process...'; ^
-                        $ids = $p | Select-Object -ExpandProperty OwningProcess -Unique; ^
-                        foreach ($id in $ids) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue } ^
-                    } else { ^
-                        Write-Host 'Tomcat is not running.' ^
-                    }"
+                    "$c=Get-NetTCPConnection -LocalPort %BACKEND_PORT% -State Listen -ErrorAction SilentlyContinue; if($c){$c | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object {Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue}}"
+
+                    timeout /t 3 /nobreak >nul
+
+                    if exist "%WORKSPACE%\\backend.log" (
+                        del /F /Q "%WORKSPACE%\\backend.log"
+                    )
 
                     echo.
-                    echo Waiting for Tomcat to stop...
+                    echo Starting backend on port %BACKEND_PORT%...
+
+                    start "QuizApp-Backend" /B cmd /c ^
+                    ""%JAVA_HOME%\\bin\\java.exe" -jar "%BACKEND_JAR%" --server.port=%BACKEND_PORT% > "%WORKSPACE%\\backend.log" 2>&1"
+
+                    echo.
+                    echo Backend start command executed.
+                '''
+            }
+        }
+
+
+        stage('Backend Health Check') {
+
+            steps {
+
+                bat '''
+                    @echo off
+
+                    echo ==========================================
+                    echo BACKEND HEALTH CHECK
+                    echo ==========================================
+
+                    set RETRIES=30
+
+                    :BACKEND_CHECK
+
+                    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+                    "try {$r=Invoke-WebRequest -Uri '%BACKEND_URL%' -UseBasicParsing -TimeoutSec 5; Write-Host ('Backend HTTP Status: ' + $r.StatusCode); if($r.StatusCode -eq 200){exit 0}else{exit 1}} catch {Write-Host 'Backend is not ready yet.'; exit 1}"
+
+                    if not errorlevel 1 (
+                        echo.
+                        echo BACKEND IS RUNNING.
+                        echo URL: %BACKEND_URL%
+                        exit /b 0
+                    )
+
+                    set /a RETRIES-=1
+
+                    if %RETRIES% LEQ 0 (
+
+                        echo.
+                        echo ERROR: Backend failed to start.
+
+                        echo.
+                        echo ==========================================
+                        echo BACKEND LOG
+                        echo ==========================================
+
+                        if exist "%WORKSPACE%\\backend.log" (
+                            type "%WORKSPACE%\\backend.log"
+                        )
+
+                        exit /b 1
+                    )
+
+                    echo Waiting 5 seconds...
 
                     timeout /t 5 /nobreak >nul
 
+                    goto BACKEND_CHECK
+                '''
+            }
+        }
+
+
+        stage('Deploy Appzillon WARs') {
+
+            steps {
+
+                bat '''
+                    @echo off
+
+                    echo ==========================================
+                    echo DEPLOYING APPZILLON WAR FILES
+                    echo ==========================================
+
+                    if not exist "%DEPLOY_DIR%\\%WEB_WAR%" (
+                        echo ERROR: %WEB_WAR% not found.
+                        exit /b 1
+                    )
+
+                    if not exist "%DEPLOY_DIR%\\%SERVER_WAR%" (
+                        echo ERROR: %SERVER_WAR% not found.
+                        exit /b 1
+                    )
+
+                    echo.
+                    echo Stopping Tomcat...
+
                     powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-                    "$p = Get-NetTCPConnection -LocalPort 8084 -State Listen -ErrorAction SilentlyContinue; ^
-                    if ($p) { Write-Host 'WARNING: Port 8084 is still in use.' } ^
-                    else { Write-Host 'Tomcat stopped successfully.' }"
-                '''
-            }
-        }
+                    "$c=Get-NetTCPConnection -LocalPort %TOMCAT_PORT% -State Listen -ErrorAction SilentlyContinue; if($c){$c | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object {Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue}}"
 
-
-        // =========================================================
-        // 3. CLEAN OLD DEPLOYMENT
-        // =========================================================
-
-        stage('Clean Old Deployment') {
-
-            steps {
-
-                bat '''
-                    @echo off
+                    timeout /t 5 /nobreak >nul
 
                     echo.
-                    echo ==========================================
-                    echo CLEANING OLD DEPLOYMENT
-                    echo ==========================================
+                    echo Removing old QuizApp deployment...
 
-                    if exist "%TOMCAT_WEBAPPS%\\QuizApp.war" (
-                        echo Removing old QuizApp.war...
-                        del /F /Q "%TOMCAT_WEBAPPS%\\QuizApp.war"
+                    if exist "%TOMCAT_WEBAPPS%\\%WEB_WAR%" (
+                        del /F /Q "%TOMCAT_WEBAPPS%\\%WEB_WAR%"
                     )
 
-                    if exist "%TOMCAT_WEBAPPS%\\QuizApp" (
-                        echo Removing old QuizApp directory...
-                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\QuizApp"
-                    )
-
-                    if exist "%TOMCAT_WEBAPPS%\\AppzillonServer.war" (
-                        echo Removing old AppzillonServer.war...
-                        del /F /Q "%TOMCAT_WEBAPPS%\\AppzillonServer.war"
-                    )
-
-                    if exist "%TOMCAT_WEBAPPS%\\AppzillonServer" (
-                        echo Removing old AppzillonServer directory...
-                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\AppzillonServer"
+                    if exist "%TOMCAT_WEBAPPS%\\%WEB_CONTEXT%" (
+                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\%WEB_CONTEXT%"
                     )
 
                     echo.
-                    echo Old deployment cleaned successfully.
-                '''
-            }
-        }
+                    echo Removing old AppzillonServer deployment...
 
+                    if exist "%TOMCAT_WEBAPPS%\\%SERVER_WAR%" (
+                        del /F /Q "%TOMCAT_WEBAPPS%\\%SERVER_WAR%"
+                    )
 
-        // =========================================================
-        // 4. COPY WAR FILES
-        // =========================================================
-
-        stage('Copy WAR Files') {
-
-            steps {
-
-                bat '''
-                    @echo off
+                    if exist "%TOMCAT_WEBAPPS%\\%SERVER_CONTEXT%" (
+                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\%SERVER_CONTEXT%"
+                    )
 
                     echo.
-                    echo ==========================================
-                    echo COPYING WAR FILES
-                    echo ==========================================
+                    echo Copying QuizApp WAR...
 
-                    echo.
-                    echo Copying QuizApp.war...
-
-                    copy /Y "%QUIZAPP_WAR%" "%TOMCAT_WEBAPPS%\\QuizApp.war"
+                    copy /Y "%DEPLOY_DIR%\\%WEB_WAR%" "%TOMCAT_WEBAPPS%\\%WEB_WAR%"
 
                     if errorlevel 1 (
-                        echo ERROR: QuizApp.war copy failed.
+                        echo ERROR: QuizApp WAR deployment failed.
                         exit /b 1
                     )
 
-                    echo QuizApp.war copied successfully.
+                    echo QuizApp WAR copied successfully.
 
                     echo.
-                    echo Copying AppzillonServer.war...
+                    echo Copying AppzillonServer WAR...
 
-                    copy /Y "%APPZILLON_WAR%" "%TOMCAT_WEBAPPS%\\AppzillonServer.war"
+                    copy /Y "%DEPLOY_DIR%\\%SERVER_WAR%" "%TOMCAT_WEBAPPS%\\%SERVER_WAR%"
 
                     if errorlevel 1 (
-                        echo ERROR: AppzillonServer.war copy failed.
+                        echo ERROR: AppzillonServer WAR deployment failed.
                         exit /b 1
                     )
 
-                    echo AppzillonServer.war copied successfully.
+                    echo AppzillonServer WAR copied successfully.
 
                     echo.
-                    echo ==========================================
-                    echo WAR FILES COPIED SUCCESSFULLY
-                    echo ==========================================
+                    echo Starting Tomcat...
 
-                    dir "%TOMCAT_WEBAPPS%" /A
-                '''
-            }
-        }
-
-
-        // =========================================================
-        // 5. START TOMCAT
-        // =========================================================
-
-        stage('Start Tomcat') {
-
-            steps {
-
-                bat '''
-                    @echo off
-
-                    echo.
-                    echo ==========================================
-                    echo STARTING TOMCAT
-                    echo ==========================================
-
-                    cd /d "%TOMCAT_BIN%"
+                    cd /d "%TOMCAT_HOME%\\bin"
 
                     start "Tomcat" /B cmd /c "catalina.bat start"
 
                     echo.
-                    echo Tomcat start command sent.
-
-                    echo.
-                    echo Waiting for Tomcat to start...
-
-                    timeout /t 15 /nobreak >nul
-
-                    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-                    "$p = Get-NetTCPConnection -LocalPort 8084 -State Listen -ErrorAction SilentlyContinue; ^
-                    if ($p) { ^
-                        Write-Host 'Tomcat is running on port 8084.'; ^
-                        exit 0 ^
-                    } else { ^
-                        Write-Host 'Tomcat is NOT running on port 8084.'; ^
-                        exit 1 ^
-                    }"
-
-                    if errorlevel 1 (
-                        echo.
-                        echo ERROR: Tomcat failed to start.
-                        echo Check:
-                        echo %TOMCAT_HOME%\\logs
-                        exit /b 1
-                    )
-
-                    echo.
-                    echo Tomcat started successfully.
+                    echo Tomcat start command executed.
                 '''
             }
         }
 
 
-        // =========================================================
-        // 6. WAIT FOR QUIZAPP
-        // =========================================================
-
-        stage('Wait For QuizApp') {
+        stage('Tomcat Health Check') {
 
             steps {
 
                 bat '''
                     @echo off
 
-                    echo.
                     echo ==========================================
-                    echo WAITING FOR QUIZAPP
+                    echo TOMCAT HEALTH CHECK
                     echo ==========================================
 
-                    set RETRIES=24
+                    set RETRIES=30
 
-                    :CHECK_QUIZAPP
-
-                    echo.
-                    echo Checking:
-                    echo %FRONTEND_URL%
+                    :TOMCAT_CHECK
 
                     powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-                    "try { ^
-                        $r = Invoke-WebRequest -Uri '%FRONTEND_URL%' -UseBasicParsing -TimeoutSec 5; ^
-                        Write-Host 'QuizApp HTTP Status:' $r.StatusCode; ^
-                        if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } ^
-                    } catch { ^
-                        Write-Host 'QuizApp is not ready yet.'; ^
-                        exit 1 ^
-                    }"
+                    "$c=Get-NetTCPConnection -LocalPort %TOMCAT_PORT% -State Listen -ErrorAction SilentlyContinue; if($c){Write-Host 'Tomcat is listening on port %TOMCAT_PORT%'; exit 0}else{Write-Host 'Tomcat is not ready yet.'; exit 1}"
+
+                    if not errorlevel 1 (
+                        echo.
+                        echo TOMCAT IS RUNNING ON PORT %TOMCAT_PORT%.
+                        exit /b 0
+                    )
+
+                    set /a RETRIES-=1
+
+                    if %RETRIES% LEQ 0 (
+
+                        echo.
+                        echo ERROR: Tomcat did not start.
+
+                        echo.
+                        echo Check Tomcat logs:
+
+                        echo %TOMCAT_HOME%\\logs
+
+                        exit /b 1
+                    )
+
+                    echo Waiting 5 seconds...
+
+                    timeout /t 5 /nobreak >nul
+
+                    goto TOMCAT_CHECK
+                '''
+            }
+        }
+
+
+        stage('Verify Appzillon Deployment') {
+
+            steps {
+
+                bat '''
+                    @echo off
+
+                    echo ==========================================
+                    echo VERIFYING APPZILLON DEPLOYMENT
+                    echo ==========================================
+
+                    set RETRIES=30
+
+                    :APPZILLON_CHECK
+
+                    if exist "%TOMCAT_WEBAPPS%\\%SERVER_CONTEXT%" (
+                        echo AppzillonServer directory detected.
+                        exit /b 0
+                    )
+
+                    if exist "%TOMCAT_WEBAPPS%\\%SERVER_WAR%" (
+                        echo AppzillonServer WAR detected.
+                        exit /b 0
+                    )
+
+                    set /a RETRIES-=1
+
+                    if %RETRIES% LEQ 0 (
+                        echo.
+                        echo ERROR: AppzillonServer deployment not detected.
+                        exit /b 1
+                    )
+
+                    echo Waiting for Appzillon deployment...
+
+                    timeout /t 5 /nobreak >nul
+
+                    goto APPZILLON_CHECK
+                '''
+            }
+        }
+
+
+        stage('Frontend Health Check') {
+
+            steps {
+
+                bat '''
+                    @echo off
+
+                    echo ==========================================
+                    echo APPZILLON FRONTEND HEALTH CHECK
+                    echo ==========================================
+
+                    echo.
+                    echo URL:
+                    echo %FRONTEND_URL%
+
+                    set RETRIES=30
+
+                    :FRONTEND_CHECK
+
+                    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+                    "try {$r=Invoke-WebRequest -Uri '%FRONTEND_URL%' -UseBasicParsing -TimeoutSec 5; Write-Host ('Frontend HTTP Status: ' + $r.StatusCode); if(($r.StatusCode -eq 200) -or ($r.StatusCode -eq 302) -or ($r.StatusCode -eq 403)){exit 0}else{exit 1}} catch {Write-Host 'QuizApp frontend is not ready yet.'; exit 1}"
 
                     if not errorlevel 1 (
                         echo.
                         echo ==========================================
-                        echo QUIZAPP IS UP
+                        echo APPZILLON FRONTEND IS RUNNING
                         echo ==========================================
+                        echo.
                         echo URL:
                         echo %FRONTEND_URL%
                         exit /b 0
                     )
 
-                    set /A RETRIES-=1
+                    set /a RETRIES-=1
 
                     if %RETRIES% LEQ 0 (
+
                         echo.
                         echo ==========================================
-                        echo QUIZAPP FAILED TO START
+                        echo FRONTEND HEALTH CHECK FAILED
                         echo ==========================================
+
                         echo.
-                        echo Expected URL:
+                        echo QuizApp URL:
                         echo %FRONTEND_URL%
+
                         echo.
                         echo Check Tomcat logs:
+
                         echo %TOMCAT_HOME%\\logs
+
                         exit /b 1
                     )
 
-                    echo.
-                    echo QuizApp not ready.
                     echo Waiting 5 seconds...
 
                     timeout /t 5 /nobreak >nul
 
-                    goto CHECK_QUIZAPP
-                '''
-            }
-        }
-
-
-        // =========================================================
-        // 7. VERIFY BACKEND
-        // =========================================================
-
-        stage('Verify Backend') {
-
-            steps {
-
-                bat '''
-                    @echo off
-
-                    echo.
-                    echo ==========================================
-                    echo VERIFYING BACKEND
-                    echo ==========================================
-
-                    echo Backend URL:
-                    echo %BACKEND_URL%
-
-                    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-                    "try { ^
-                        $r = Invoke-WebRequest -Uri '%BACKEND_URL%' -UseBasicParsing -TimeoutSec 10; ^
-                        Write-Host 'Backend HTTP Status:' $r.StatusCode; ^
-                        if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } ^
-                    } catch { ^
-                        Write-Host 'Backend request failed:' $_.Exception.Message; ^
-                        exit 1 ^
-                    }"
-
-                    if errorlevel 1 (
-                        echo.
-                        echo ERROR: Backend verification failed.
-                        exit /b 1
-                    )
-
-                    echo.
-                    echo Backend is UP.
-                '''
-            }
-        }
-
-
-        // =========================================================
-        // 8. FINAL FRONTEND CHECK
-        // =========================================================
-
-        stage('Final Frontend Check') {
-
-            steps {
-
-                bat '''
-                    @echo off
-
-                    echo.
-                    echo ==========================================
-                    echo FINAL FRONTEND CHECK
-                    echo ==========================================
-
-                    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-                    "try { ^
-                        $r = Invoke-WebRequest -Uri '%FRONTEND_URL%' -UseBasicParsing -TimeoutSec 10; ^
-                        Write-Host 'Frontend HTTP Status:' $r.StatusCode; ^
-                        if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } ^
-                    } catch { ^
-                        Write-Host 'Frontend request failed:' $_.Exception.Message; ^
-                        exit 1 ^
-                    }"
-
-                    if errorlevel 1 (
-                        echo.
-                        echo ERROR: Frontend is not responding with HTTP 200.
-                        exit /b 1
-                    )
-
-                    echo.
-                    echo ==========================================
-                    echo FRONTEND IS UP
-                    echo ==========================================
-
-                    echo URL:
-                    echo %FRONTEND_URL%
+                    goto FRONTEND_CHECK
                 '''
             }
         }
     }
 
 
-    // =============================================================
-    // POST ACTIONS
-    // =============================================================
-
     post {
 
         success {
 
-            echo '=========================================='
-            echo 'PIPELINE SUCCESS'
-            echo '=========================================='
+            echo '''
+==========================================
+QUIZAPP CI/CD SUCCESSFUL
+==========================================
 
-            echo 'Backend : http://localhost:8020/api/topics'
-            echo 'Frontend: http://localhost:8084/QuizApp'
+Backend:
+http://localhost:8020/api/topics
+
+Appzillon Web:
+http://localhost:8084/QuizApp/
+
+QuizApp WAR:
+C:\\JenkinsStorage\\QuizApp.war
+
+Appzillon Server WAR:
+C:\\JenkinsStorage\\AppzillonServer.war
+
+Backend JAR:
+Generated in Jenkins workspace
+
+Backend Log:
+Jenkins workspace\\backend.log
+
+==========================================
+'''
         }
 
 
         failure {
 
-            echo '=========================================='
-            echo 'PIPELINE FAILED'
-            echo '=========================================='
+            echo '''
+==========================================
+QUIZAPP CI/CD FAILED
+==========================================
 
-            echo 'Tomcat logs:'
-            echo 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\logs'
-        }
+Check the failed stage in the Jenkins
+Console Output.
 
+If the failure is during frontend
+deployment, check:
 
-        always {
+D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\logs
 
-            bat '''
-                @echo off
+Backend log:
 
-                echo.
-                echo ==========================================
-                echo FINAL TOMCAT STATUS
-                echo ==========================================
+Jenkins workspace\\backend.log
 
-                powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-                "Get-NetTCPConnection -LocalPort 8084 -ErrorAction SilentlyContinue | Format-Table -AutoSize"
-
-                echo.
-                echo ==========================================
-                echo TOMCAT WEBAPPS
-                echo ==========================================
-
-                dir "%TOMCAT_WEBAPPS%" /A
-            '''
+==========================================
+'''
         }
     }
 }

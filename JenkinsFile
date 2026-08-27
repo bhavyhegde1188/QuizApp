@@ -10,9 +10,9 @@ pipeline {
 
         JAR_NAME = 'quizapp-1.0.0.jar'
 
-        WEB_WAR = 'QuizApp-Web.war'
+        WEB_WAR = 'QuizApp.war'
 
-        SERVER_WAR = 'QuizApp-Server.war'
+        SERVER_WAR = 'AppzillonServer.war'
 
         BACKEND_PORT = '8020'
 
@@ -26,7 +26,7 @@ pipeline {
 
         WEB_CONTEXT = 'QuizApp'
 
-        SERVER_CONTEXT = 'QuizAppServer'
+        SERVER_CONTEXT = 'AppzillonServer'
 
         FRONTEND_URL = 'http://localhost:8084/QuizApp/'
     }
@@ -88,32 +88,13 @@ pipeline {
             }
         }
 
-        stage('Prepare Deployment') {
+        stage('Verify Deployment Files') {
             steps {
                 bat '''
                     @echo off
 
                     echo ==========================================
-                    echo PREPARING DEPLOYMENT
-                    echo ==========================================
-
-                    if not exist "%DEPLOY_DIR%" (
-                        mkdir "%DEPLOY_DIR%"
-                    )
-
-                    echo Deployment directory:
-                    echo %DEPLOY_DIR%
-                '''
-            }
-        }
-
-        stage('Verify Appzillon WAR Files') {
-            steps {
-                bat '''
-                    @echo off
-
-                    echo ==========================================
-                    echo VERIFYING APPZILLON WAR FILES
+                    echo VERIFYING DEPLOYMENT FILES
                     echo ==========================================
 
                     if not exist "%DEPLOY_DIR%\\%WEB_WAR%" (
@@ -128,11 +109,11 @@ pipeline {
                         exit /b 1
                     )
 
-                    echo Web WAR found:
+                    echo Web WAR:
                     dir "%DEPLOY_DIR%\\%WEB_WAR%"
 
                     echo.
-                    echo Server WAR found:
+                    echo Server WAR:
                     dir "%DEPLOY_DIR%\\%SERVER_WAR%"
                 '''
             }
@@ -168,8 +149,6 @@ pipeline {
                     echo DEPLOYING BACKEND
                     echo ==========================================
 
-                    echo Checking port %BACKEND_PORT%...
-
                     for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%BACKEND_PORT% ^| findstr LISTENING') do (
                         echo Stopping backend PID %%a
                         taskkill /F /PID %%a >nul 2>&1
@@ -180,8 +159,6 @@ pipeline {
                     if exist "%DEPLOY_DIR%\\backend.log" (
                         del /F /Q "%DEPLOY_DIR%\\backend.log"
                     )
-
-                    echo Starting Spring Boot...
 
                     start "QuizApp-Backend" /B cmd /c ^
                     "set JENKINS_NODE_COOKIE=dontKillMe&& "%JAVA_HOME%\\bin\\java.exe" -jar "%DEPLOY_DIR%\\%JAR_NAME%" > "%DEPLOY_DIR%\\backend.log" 2>&1"
@@ -248,13 +225,15 @@ pipeline {
                     echo DEPLOYING APPZILLON WAR FILES
                     echo ==========================================
 
-                    echo Web WAR:
-                    echo %DEPLOY_DIR%\\%WEB_WAR%
+                    if not exist "%DEPLOY_DIR%\\%WEB_WAR%" (
+                        echo ERROR: %WEB_WAR% not found.
+                        exit /b 1
+                    )
 
-                    echo Server WAR:
-                    echo %DEPLOY_DIR%\\%SERVER_WAR%
-
-                    echo.
+                    if not exist "%DEPLOY_DIR%\\%SERVER_WAR%" (
+                        echo ERROR: %SERVER_WAR% not found.
+                        exit /b 1
+                    )
 
                     echo Stopping Tomcat...
 
@@ -268,8 +247,6 @@ pipeline {
                         del /F /Q "%TOMCAT_WEBAPPS%\\%WEB_WAR%"
                     )
 
-                    echo Removing old Web application...
-
                     if exist "%TOMCAT_WEBAPPS%\\%WEB_CONTEXT%" (
                         rmdir /S /Q "%TOMCAT_WEBAPPS%\\%WEB_CONTEXT%"
                     )
@@ -280,13 +257,9 @@ pipeline {
                         del /F /Q "%TOMCAT_WEBAPPS%\\%SERVER_WAR%"
                     )
 
-                    echo Removing old Server application...
-
                     if exist "%TOMCAT_WEBAPPS%\\%SERVER_CONTEXT%" (
                         rmdir /S /Q "%TOMCAT_WEBAPPS%\\%SERVER_CONTEXT%"
                     )
-
-                    echo.
 
                     echo Copying Web WAR...
 
@@ -299,8 +272,6 @@ pipeline {
 
                     echo Web WAR deployed successfully.
 
-                    echo.
-
                     echo Copying Server WAR...
 
                     copy /Y "%DEPLOY_DIR%\\%SERVER_WAR%" "%TOMCAT_WEBAPPS%\\%SERVER_WAR%"
@@ -311,8 +282,6 @@ pipeline {
                     )
 
                     echo Server WAR deployed successfully.
-
-                    echo.
 
                     echo Starting Tomcat...
 
@@ -396,13 +365,6 @@ pipeline {
 
                     if %RETRIES% LEQ 0 (
                         echo ERROR: Appzillon frontend health check failed.
-
-                        echo ==========================================
-                        echo TOMCAT PORT
-                        echo ==========================================
-
-                        netstat -ano | findstr :%TOMCAT_PORT%
-
                         exit /b 1
                     )
 
@@ -418,9 +380,7 @@ pipeline {
 
                 writeFile file: 'shutdown-quizapp.bat', text: """@echo off
 
-echo ==========================================
-echo QUIZAPP SHUTDOWN TIMER STARTED
-echo ==========================================
+echo QuizApp shutdown timer started.
 
 timeout /t 10800 /nobreak >nul
 
@@ -435,15 +395,10 @@ echo Stopping Tomcat...
 call "${TOMCAT_HOME}\\bin\\shutdown.bat"
 
 echo QuizApp shutdown completed.
-
 """
 
                 bat '''
                     @echo off
-
-                    echo ==========================================
-                    echo SCHEDULING 3 HOUR SHUTDOWN
-                    echo ==========================================
 
                     copy /Y "%WORKSPACE%\\shutdown-quizapp.bat" "%DEPLOY_DIR%\\shutdown-quizapp.bat"
 
@@ -454,7 +409,6 @@ echo QuizApp shutdown completed.
 
                     start "QuizApp-Shutdown" /MIN cmd /c call "%DEPLOY_DIR%\\shutdown-quizapp.bat"
 
-                    echo.
                     echo 3 HOUR SHUTDOWN TIMER STARTED.
                 '''
             }
@@ -464,34 +418,30 @@ echo QuizApp shutdown completed.
     post {
 
         success {
-
             echo '''
 ==========================================
 QUIZAPP CI/CD SUCCESSFUL
 ==========================================
 
-GitHub:
-https://github.com/bhavyhegde1188/QuizApp
-
 Backend:
 http://localhost:8020
 
-Frontend:
+Appzillon Web:
 http://localhost:8084/QuizApp/
 
 Backend JAR:
 C:\\JenkinsStorage\\quizapp-1.0.0.jar
 
 Appzillon Web WAR:
-C:\\JenkinsStorage\\QuizApp-Web.war
+C:\\JenkinsStorage\\QuizApp.war
 
 Appzillon Server WAR:
-C:\\JenkinsStorage\\QuizApp-Server.war
+C:\\JenkinsStorage\\AppzillonServer.war
 
 Backend Log:
 C:\\JenkinsStorage\\backend.log
 
-Shutdown:
+Application shutdown:
 After 3 hours
 
 ==========================================
@@ -499,7 +449,6 @@ After 3 hours
         }
 
         failure {
-
             echo '''
 ==========================================
 QUIZAPP CI/CD FAILED

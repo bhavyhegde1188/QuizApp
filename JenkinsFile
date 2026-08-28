@@ -925,48 +925,52 @@ pipeline {
                     Write-Host $url
 
 
-                    try {
+                    $frontendReady = $false
 
-                        $response = Invoke-WebRequest `
-                            -Uri $url `
-                            -Method GET `
-                            -UseBasicParsing `
-                            -TimeoutSec 30
+                    for ($attempt = 1; $attempt -le 12; $attempt++) {
 
+                        Write-Host "Frontend check $attempt/12..."
 
-                        Write-Host ""
-                        Write-Host "HTTP Status:"
-                        Write-Host $response.StatusCode
+                        try {
 
+                            $response = Invoke-WebRequest `
+                                -Uri $url `
+                                -Method GET `
+                                -UseBasicParsing `
+                                -TimeoutSec 10
 
-                        if (
-                            $response.StatusCode -ge 200 `
-                            -and
-                            $response.StatusCode -lt 400
-                        ) {
+                            Write-Host "HTTP Status: $($response.StatusCode)"
 
-                            Write-Host ""
-                            Write-Host "============================================"
-                            Write-Host "FRONTEND IS WORKING"
-                            Write-Host "============================================"
+                            if (
+                                $response.StatusCode -ge 200 `
+                                -and
+                                $response.StatusCode -lt 400
+                            ) {
 
-                        } else {
+                                $frontendReady = $true
+                                break
+                            }
 
-                            Write-Error `
-                                "Frontend returned unexpected HTTP status."
+                            Write-Host "Frontend returned HTTP $($response.StatusCode)."
 
-                            exit 1
+                        } catch {
+
+                            Write-Host "Frontend is not ready: $($_.Exception.Message)"
                         }
 
-                    } catch {
+                        Start-Sleep -Seconds 10
+                    }
 
-                        Write-Host ""
-                        Write-Host "Frontend HTTP check failed."
+                    if (-not $frontendReady) {
 
-                        Write-Error $_.Exception.Message
-
+                        Write-Error "Frontend did not return a successful response within 120 seconds."
                         exit 1
                     }
+
+                    Write-Host ""
+                    Write-Host "============================================"
+                    Write-Host "FRONTEND IS WORKING"
+                    Write-Host "============================================"
                 '''
             }
         }

@@ -4,24 +4,23 @@ pipeline {
 
     options {
         skipDefaultCheckout(true)
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 10, unit: 'MINUTES')
         disableConcurrentBuilds()
     }
 
     parameters {
-        string(name: 'GIT_REPOSITORY', defaultValue: 'https://github.com/bhavyhegde1188/QuizApp.git', description: 'Git repository URL')
+        string(name: 'GIT_REPOSITORY', defaultValue: '', description: 'Git repository URL')
         string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch')
-        string(name: 'PROJECT_NAME', defaultValue: 'QuizApp', description: 'Project deployment folder name')
-        string(name: 'BACKEND_DEPLOY_DIR', defaultValue: 'C:\\JenkinsStorage\\QuizApp', description: 'Required backend deployment directory')
+        string(name: 'PROJECT_NAME', defaultValue: 'Project', description: 'Project deployment folder name')
         string(name: 'SOURCE_JAR', defaultValue: 'target/*.jar', description: 'Built backend JAR path')
         string(name: 'BACKEND_PORT', defaultValue: '8020', description: 'Backend port')
-        string(name: 'BACKEND_HEALTH_URL', defaultValue: 'http://localhost:8020/api/topics', description: 'Backend health URL')
-        string(name: 'WAR_ONE_SOURCE', defaultValue: 'C:\\JenkinsStorage\\QuizApp.war', description: 'First WAR source path')
-        string(name: 'WAR_ONE_NAME', defaultValue: 'QuizApp.war', description: 'First WAR name in Tomcat webapps')
-        string(name: 'WAR_TWO_SOURCE', defaultValue: 'C:\\JenkinsStorage\\AppzillonServer.war', description: 'Second WAR source path')
-        string(name: 'WAR_TWO_NAME', defaultValue: 'AppzillonServer.war', description: 'Second WAR name in Tomcat webapps')
-        string(name: 'FRONTEND_CONTEXT', defaultValue: 'QuizApp', description: 'Frontend Tomcat context')
-        string(name: 'FRONTEND_URL', defaultValue: 'http://localhost:8084/QuizApp', description: 'Frontend URL')
+        string(name: 'BACKEND_HEALTH_URL', defaultValue: '', description: 'Backend health URL; leave empty to skip API check')
+        string(name: 'WAR_ONE_SOURCE', defaultValue: 'C:\\JenkinsStorage\\Frontend.war', description: 'First WAR source path')
+        string(name: 'WAR_ONE_NAME', defaultValue: 'frontend.war', description: 'First WAR name in Tomcat webapps')
+        string(name: 'WAR_TWO_SOURCE', defaultValue: 'C:\\JenkinsStorage\\Server.war', description: 'Second WAR source path')
+        string(name: 'WAR_TWO_NAME', defaultValue: 'server.war', description: 'Second WAR name in Tomcat webapps')
+        string(name: 'FRONTEND_CONTEXT', defaultValue: 'frontend', description: 'Frontend Tomcat context')
+        string(name: 'FRONTEND_URL', defaultValue: 'http://localhost:8084/frontend', description: 'Frontend URL')
         string(name: 'E2E_PROFILE', defaultValue: 'e2e', description: 'Maven profile for browser tests')
         string(name: 'PLAYWRIGHT_BROWSER', defaultValue: 'chromium', description: 'Playwright browser to install')
         string(name: 'E2E_REPORT_DIR', defaultValue: 'target\\failsafe-reports', description: 'E2E report directory')
@@ -44,10 +43,10 @@ pipeline {
         E2E_PROFILE = "${params.E2E_PROFILE}"
         PLAYWRIGHT_BROWSER = "${params.PLAYWRIGHT_BROWSER}"
         E2E_REPORT_DIR = "${params.E2E_REPORT_DIR}"
-        BACKEND_DIR = "${params.BACKEND_DEPLOY_DIR}"
-        BACKEND_JAR = "${params.BACKEND_DEPLOY_DIR}\\BackendJar.jar"
-        BACKEND_LOG = "${params.BACKEND_DEPLOY_DIR}\\Backend.log"
-        BACKEND_ERROR_LOG = "${params.BACKEND_DEPLOY_DIR}\\Backend-error.log"
+        BACKEND_DIR = "${STORAGE_ROOT}\\${params.PROJECT_NAME}"
+        BACKEND_JAR = "${STORAGE_ROOT}\\${params.PROJECT_NAME}\\BackendJar.jar"
+        BACKEND_LOG = "${STORAGE_ROOT}\\${params.PROJECT_NAME}\\Backend.log"
+        BACKEND_ERROR_LOG = "${STORAGE_ROOT}\\${params.PROJECT_NAME}\\Backend-error.log"
     }
 
     stages {
@@ -63,10 +62,6 @@ pipeline {
                 bat '''
                     java -version
                     mvn -version
-                    if "%BACKEND_DIR%"=="" (
-                        echo ERROR: BACKEND_DEPLOY_DIR is required.
-                        exit /b 1
-                    )
                     if not exist "%BACKEND_DIR%" mkdir "%BACKEND_DIR%"
                     if not exist "%WAR_ONE_SOURCE%" (
                         echo ERROR: First WAR was not found: %WAR_ONE_SOURCE%
@@ -100,12 +95,6 @@ pipeline {
         stage('Deploy Backend') {
             steps {
                 bat '''
-                    if "%BACKEND_DIR%"=="" (
-                        echo ERROR: BACKEND_DEPLOY_DIR is required.
-                        exit /b 1
-                    )
-                    if not exist "%BACKEND_DIR%" mkdir "%BACKEND_DIR%"
-                    if not exist "%BACKEND_DIR%" exit /b 1
                     if not exist "%SOURCE_JAR%" (
                         echo ERROR: Backend JAR was not generated: %SOURCE_JAR%
                         exit /b 1
@@ -130,6 +119,26 @@ pipeline {
                     $command = "start `"Backend`" /b java.exe -jar `"$env:BACKEND_JAR`" 1>>`"$env:BACKEND_LOG`" 2>>`"$env:BACKEND_ERROR_LOG`""
                     Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $command -WorkingDirectory $env:BACKEND_DIR -WindowStyle Hidden
                 '''
+            }
+        }
+
+        stage('Wait For Backend') {
+            steps {
+                timeout(time: 90, unit: 'SECONDS') {
+                    powershell '''
+                        $ready = $false
+                        for ($attempt = 1; $attempt -le 18; $attempt++) {
+                            $result = Test-NetConnection -ComputerName localhost -Port ([int]$env:BACKEND_PORT) -WarningAction SilentlyContinue
+                            if ($result.TcpTestSucceeded) { $ready = $true; break }
+                            Start-Sleep -Seconds 5
+                        }
+                        if (-not $ready) {
+                            if (Test-Path $env:BACKEND_LOG) { Get-Content $env:BACKEND_LOG -Tail 80 }
+                            if (Test-Path $env:BACKEND_ERROR_LOG) { Get-Content $env:BACKEND_ERROR_LOG -Tail 80 }
+                            exit 1
+                        }
+                    '''
+                }
             }
         }
 

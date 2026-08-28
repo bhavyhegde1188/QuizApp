@@ -1,0 +1,217 @@
+pipeline {
+
+    agent any
+
+    options {
+        skipDefaultCheckout(true)
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    // Change only the parameters when using this pipeline for another project.
+    parameters {
+        string(name: 'GIT_REPOSITORY', defaultValue: '', description: 'Git repository URL')
+        string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch')
+        string(name: 'BACKEND_PORT', defaultValue: '8082', description: 'Backend port')
+        string(name: 'BACKEND_JAR_NAME', defaultValue: 'application.jar', description: 'Generated backend JAR filename')
+        string(name: 'BACKEND_DEPLOY_DIR', defaultValue: 'D:\\Deployment\\backend', description: 'Backend deployment directory')
+        string(name: 'BACKEND_HEALTH_URL', defaultValue: '', description: 'Optional backend health URL')
+        string(name: 'TOMCAT_PORT', defaultValue: '8084', description: 'Tomcat HTTP port')
+        string(name: 'TOMCAT_CONTEXT', defaultValue: 'frontend', description: 'Frontend Tomcat context name')
+        string(name: 'APPZILLON_DEPLOY_DIR', defaultValue: 'D:\\Deployment\\appzillon', description: 'Directory containing frontend WAR files')
+        string(name: 'WEB_APPZILLON_WAR', defaultValue: 'webAppzilon.war', description: 'Main frontend WAR filename')
+        string(name: 'SERVER_APPZILLON_WAR', defaultValue: 'serverAppzilon.war', description: 'Server WAR filename')
+        string(name: 'FRONTEND_URL', defaultValue: 'http://localhost:8084/frontend', description: 'Frontend URL')
+        string(name: 'PLAYWRIGHT_DIR', defaultValue: 'D:\\Deployment\\scripts', description: 'Node Playwright project directory')
+        string(name: 'PLAYWRIGHT_BROWSER', defaultValue: 'chromium', description: 'Browser installed by Playwright')
+    }
+
+    environment {
+        TOMCAT_HOME = 'D:\\Softwarespath\\apache-tomcat-9.0.53\\apache-tomcat-9.0.53'
+        TOMCAT_WEBAPPS = 'D:\\Softwarespath\\apache-tomcat-9.0.53\\apache-tomcat-9.0.53\\webapps'
+        BACKEND_LOG = "${params.BACKEND_DEPLOY_DIR}\\backend.log"
+        BACKEND_ERROR_LOG = "${params.BACKEND_DEPLOY_DIR}\\backend-error.log"
+        BACKEND_PID_FILE = "${params.BACKEND_DEPLOY_DIR}\\backend.pid"
+        GIT_REPOSITORY = "${params.GIT_REPOSITORY}"
+        GIT_BRANCH = "${params.GIT_BRANCH}"
+        BACKEND_PORT = "${params.BACKEND_PORT}"
+        BACKEND_JAR_NAME = "${params.BACKEND_JAR_NAME}"
+        BACKEND_DEPLOY_DIR = "${params.BACKEND_DEPLOY_DIR}"
+        BACKEND_HEALTH_URL = "${params.BACKEND_HEALTH_URL}"
+        TOMCAT_PORT = "${params.TOMCAT_PORT}"
+        TOMCAT_CONTEXT = "${params.TOMCAT_CONTEXT}"
+        APPZILLON_DEPLOY_DIR = "${params.APPZILLON_DEPLOY_DIR}"
+        WEB_APPZILLON_WAR = "${params.WEB_APPZILLON_WAR}"
+        SERVER_APPZILLON_WAR = "${params.SERVER_APPZILLON_WAR}"
+        FRONTEND_URL = "${params.FRONTEND_URL}"
+        PLAYWRIGHT_DIR = "${params.PLAYWRIGHT_DIR}"
+        PLAYWRIGHT_BROWSER = "${params.PLAYWRIGHT_BROWSER}"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git(branch: "${GIT_BRANCH}", url: "${GIT_REPOSITORY}")
+            }
+        }
+
+        stage('Check Environment') {
+            steps {
+                bat '''
+                    java -version
+                    if errorlevel 1 exit /b 1
+                    mvn -version
+                    if errorlevel 1 exit /b 1
+                    node -v
+                    if errorlevel 1 exit /b 1
+                    npm -v
+                    if errorlevel 1 exit /b 1
+
+                    if not exist "%TOMCAT_HOME%\\bin\\startup.bat" exit /b 1
+                    if not exist "%TOMCAT_HOME%\\bin\\shutdown.bat" exit /b 1
+                    if not exist "%APPZILLON_DEPLOY_DIR%\\%WEB_APPZILLON_WAR%" exit /b 1
+                    if not exist "%APPZILLON_DEPLOY_DIR%\\%SERVER_APPZILLON_WAR%" exit /b 1
+                    if not exist "%PLAYWRIGHT_DIR%\\package.json" exit /b 1
+                    if not exist "%PLAYWRIGHT_DIR%\\package-lock.json" exit /b 1
+                    if not exist "%PLAYWRIGHT_DIR%\\tests" exit /b 1
+                '''
+            }
+        }
+
+        stage('Build Backend') {
+            steps {
+                bat '''
+                    call mvn clean package -DskipTests
+                    if errorlevel 1 exit /b 1
+                    if not exist "target\\%BACKEND_JAR_NAME%" exit /b 1
+                '''
+            }
+        }
+
+        stage('Deploy Backend') {
+            steps {
+                bat '''
+                    if not exist "%BACKEND_DEPLOY_DIR%" mkdir "%BACKEND_DEPLOY_DIR%"
+                    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*%BACKEND_JAR_NAME%*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+                    copy /Y "target\\%BACKEND_JAR_NAME%" "%BACKEND_DEPLOY_DIR%\\%BACKEND_JAR_NAME%"
+                    if errorlevel 1 exit /b 1
+
+                    if exist "%BACKEND_LOG%" del /F /Q "%BACKEND_LOG%"
+                    if exist "%BACKEND_ERROR_LOG%" del /F /Q "%BACKEND_ERROR_LOG%"
+                    if exist "%BACKEND_PID_FILE%" del /F /Q "%BACKEND_PID_FILE%"
+                    set "JENKINS_NODE_COOKIE=dontKillMe"
+                    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$jar = '%BACKEND_DEPLOY_DIR%\\%BACKEND_JAR_NAME%'; $p = Start-Process -FilePath 'java' -ArgumentList '-jar',$jar -WorkingDirectory '%BACKEND_DEPLOY_DIR%' -RedirectStandardOutput '%BACKEND_LOG%' -RedirectStandardError '%BACKEND_ERROR_LOG%' -PassThru; Set-Content '%BACKEND_PID_FILE%' $p.Id"
+                '''
+            }
+        }
+
+        stage('Wait For Backend') {
+            steps {
+                timeout(time: 90, unit: 'SECONDS') {
+                    powershell '''
+                        $ready = $false
+                        for ($attempt = 1; $attempt -le 18; $attempt++) {
+                            $result = Test-NetConnection localhost -Port ([int]$env:BACKEND_PORT) -WarningAction SilentlyContinue
+                            if ($result.TcpTestSucceeded) { $ready = $true; break }
+                            Start-Sleep -Seconds 5
+                        }
+                        if (-not $ready) { exit 1 }
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Backend') {
+            when { expression { params.BACKEND_HEALTH_URL?.trim() } }
+            steps {
+                powershell '''
+                    $response = Invoke-WebRequest -Uri $env:BACKEND_HEALTH_URL -UseBasicParsing -TimeoutSec 20
+                    if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) { exit 1 }
+                '''
+            }
+        }
+
+        stage('Deploy Frontend') {
+            steps {
+                bat '''
+                    call "%TOMCAT_HOME%\\bin\\shutdown.bat" >nul 2>&1 || echo Tomcat was not running; continuing.
+                    powershell.exe -NoProfile -Command "Start-Sleep -Seconds 10"
+                    if exist "%TOMCAT_WEBAPPS%\\%SERVER_APPZILLON_WAR%" del /F /Q "%TOMCAT_WEBAPPS%\\%SERVER_APPZILLON_WAR%"
+                    if exist "%TOMCAT_WEBAPPS%\\%WEB_APPZILLON_WAR%" del /F /Q "%TOMCAT_WEBAPPS%\\%WEB_APPZILLON_WAR%"
+                    if exist "%TOMCAT_WEBAPPS%\\%TOMCAT_CONTEXT%" rmdir /S /Q "%TOMCAT_WEBAPPS%\\%TOMCAT_CONTEXT%"
+                    copy /Y "%APPZILLON_DEPLOY_DIR%\\%SERVER_APPZILLON_WAR%" "%TOMCAT_WEBAPPS%\\%SERVER_APPZILLON_WAR%"
+                    if errorlevel 1 exit /b 1
+                    copy /Y "%APPZILLON_DEPLOY_DIR%\\%WEB_APPZILLON_WAR%" "%TOMCAT_WEBAPPS%\\%WEB_APPZILLON_WAR%"
+                    if errorlevel 1 exit /b 1
+                '''
+            }
+        }
+
+        stage('Start Tomcat') {
+            steps {
+                bat '''
+                    set "JENKINS_NODE_COOKIE=dontKillMe"
+                    call "%TOMCAT_HOME%\\bin\\startup.bat"
+                '''
+            }
+        }
+
+        stage('Wait For Tomcat') {
+            steps {
+                timeout(time: 90, unit: 'SECONDS') {
+                    powershell '''
+                        $ready = $false
+                        for ($attempt = 1; $attempt -le 18; $attempt++) {
+                            $result = Test-NetConnection localhost -Port ([int]$env:TOMCAT_PORT) -WarningAction SilentlyContinue
+                            if ($result.TcpTestSucceeded) { $ready = $true; break }
+                            Start-Sleep -Seconds 5
+                        }
+                        if (-not $ready) { exit 1 }
+                    '''
+                }
+            }
+        }
+
+        stage('Run Playwright Tests') {
+            steps {
+                bat '''
+                    cd /D "%PLAYWRIGHT_DIR%"
+                    call npm ci
+                    if errorlevel 1 exit /b 1
+                    call npx playwright install %PLAYWRIGHT_BROWSER%
+                    if errorlevel 1 exit /b 1
+                    if exist "playwright-report" rmdir /S /Q "playwright-report"
+                    if exist "test-results" rmdir /S /Q "test-results"
+                    call npx playwright test
+                    if errorlevel 1 exit /b 1
+                '''
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                bat '''
+                    if not exist "%TOMCAT_WEBAPPS%\\%SERVER_APPZILLON_WAR%" exit /b 1
+                    if not exist "%TOMCAT_WEBAPPS%\\%WEB_APPZILLON_WAR%" exit /b 1
+                '''
+                powershell '''
+                    $response = Invoke-WebRequest -Uri $env:FRONTEND_URL -UseBasicParsing -TimeoutSec 120
+                    if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) { exit 1 }
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'test-results/**/*,playwright-report/**/*', allowEmptyArchive: true, fingerprint: true
+        }
+        success {
+            echo 'Generic CI/CD deployment and Playwright validation completed successfully.'
+        }
+        failure {
+            echo 'Generic CI/CD pipeline failed. Check the console and archived test artifacts.'
+        }
+    }
+}

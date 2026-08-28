@@ -19,7 +19,9 @@ public class QuizAppE2EIT {
 
         try (Playwright playwright = Playwright.create();
              Browser browser = playwright.chromium().launch(
-                 new BrowserType.LaunchOptions().setHeadless(true))) {
+                 new BrowserType.LaunchOptions()
+                     .setHeadless(false)
+                     .setSlowMo(250))) {
             BrowserContext context = browser.newContext();
             Page page = context.newPage();
 

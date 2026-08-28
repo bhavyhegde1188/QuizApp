@@ -7,311 +7,1143 @@ pipeline {
         timeout(time: 10, unit: 'MINUTES')
     }
 
-    parameters {
-        string(name: 'GIT_REPOSITORY', defaultValue: 'https://github.com/bhavyhegde1188/QuizApp.git', description: 'Git repository URL')
-        string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch')
-        string(name: 'BACKEND_DEPLOY_DIR', defaultValue: 'C:\\JenkinsStorage\\QuizApp', description: 'Required backend deployment directory')
-        string(name: 'SOURCE_JAR', defaultValue: 'target\\quizapp-1.0.0.jar', description: 'Built backend JAR path')
-        string(name: 'BACKEND_JAR_NAME', defaultValue: 'quizapp.jar', description: 'Deployed backend JAR filename')
-        string(name: 'BACKEND_PROCESS_NAME', defaultValue: 'QuizAppBackend', description: 'Backend process window name')
-        string(name: 'BACKEND_LOG_NAME', defaultValue: 'backend.log', description: 'Backend standard output log filename')
-        string(name: 'BACKEND_ERROR_LOG_NAME', defaultValue: 'backend-error.log', description: 'Backend error log filename')
-        string(name: 'BACKEND_PORT', defaultValue: '8020', description: 'Backend port')
-        string(name: 'BACKEND_HEALTH_URL', defaultValue: 'http://localhost:8020/api/topics', description: 'Backend health URL')
-        string(name: 'WAR_ONE_SOURCE', defaultValue: 'C:\\JenkinsStorage\\QuizApp.war', description: 'First WAR source path')
-        string(name: 'WAR_ONE_NAME', defaultValue: 'QuizApp.war', description: 'First WAR name in Tomcat webapps')
-        string(name: 'WAR_TWO_SOURCE', defaultValue: 'C:\\JenkinsStorage\\AppzillonServer.war', description: 'Second WAR source path')
-        string(name: 'WAR_TWO_NAME', defaultValue: 'AppzillonServer.war', description: 'Second WAR name in Tomcat webapps')
-        string(name: 'FRONTEND_CONTEXT', defaultValue: 'QuizApp', description: 'Frontend Tomcat context')
-        string(name: 'FRONTEND_URL', defaultValue: 'http://localhost:8084/QuizApp', description: 'Frontend URL')
-        string(name: 'E2E_PROFILE', defaultValue: 'e2e', description: 'Maven profile for browser tests')
-        string(name: 'PLAYWRIGHT_BROWSER', defaultValue: 'chromium', description: 'Playwright browser to install')
-        string(name: 'E2E_REPORT_DIR', defaultValue: 'target\\failsafe-reports', description: 'E2E report directory')
-        string(name: 'TOMCAT_HOME', defaultValue: 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53', description: 'Tomcat installation directory')
-        string(name: 'TOMCAT_WEBAPPS', defaultValue: 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\webapps', description: 'Tomcat webapps directory')
-        string(name: 'TOMCAT_PORT', defaultValue: '8084', description: 'Tomcat HTTP port')
+    environment {
+
+        // =====================================================
+        // GITHUB
+        // =====================================================
+
+        GIT_REPOSITORY = 'https://github.com/bhavyhegde1188/QuizApp.git'
+
+
+        // =====================================================
+        // BACKEND
+        // =====================================================
+
+        BACKEND_DIR = 'C:\\JenkinsStorage\\QuizApp'
+
+        BACKEND_JAR = 'C:\\JenkinsStorage\\QuizApp\\quizapp.jar'
+
+        BACKEND_LOG = 'C:\\JenkinsStorage\\QuizApp\\backend.log'
+
+        BACKEND_ERROR_LOG =
+            'C:\\JenkinsStorage\\QuizApp\\backend-error.log'
+
+        BACKEND_PORT = '8020'
+
+        BACKEND_API = 'http://localhost:8020/api/topics'
+
+
+        // =====================================================
+        // FRONTEND WAR FILES
+        // =====================================================
+
+        QUIZAPP_WAR = 'C:\\JenkinsStorage\\QuizApp.war'
+
+        APPZILLON_SERVER_WAR =
+            'C:\\JenkinsStorage\\AppzillonServer.war'
+
+
+        // =====================================================
+        // TOMCAT
+        // =====================================================
+
+        TOMCAT_HOME =
+            'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53'
+
+        TOMCAT_WEBAPPS =
+            'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\webapps'
+
+        TOMCAT_PORT = '8084'
+
+        FRONTEND_URL = 'http://localhost:8084/quizapp'
     }
 
-    environment {
-        SOURCE_JAR = "${params.SOURCE_JAR}"
-        BACKEND_JAR_NAME = "${params.BACKEND_JAR_NAME}"
-        BACKEND_PROCESS_NAME = "${params.BACKEND_PROCESS_NAME}"
-        BACKEND_PORT = "${params.BACKEND_PORT}"
-        BACKEND_HEALTH_URL = "${params.BACKEND_HEALTH_URL}"
-        WAR_ONE_SOURCE = "${params.WAR_ONE_SOURCE}"
-        WAR_ONE_NAME = "${params.WAR_ONE_NAME}"
-        WAR_TWO_SOURCE = "${params.WAR_TWO_SOURCE}"
-        WAR_TWO_NAME = "${params.WAR_TWO_NAME}"
-        FRONTEND_CONTEXT = "${params.FRONTEND_CONTEXT}"
-        FRONTEND_URL = "${params.FRONTEND_URL}"
-        E2E_PROFILE = "${params.E2E_PROFILE}"
-        PLAYWRIGHT_BROWSER = "${params.PLAYWRIGHT_BROWSER}"
-        E2E_REPORT_DIR = "${params.E2E_REPORT_DIR}"
-        BACKEND_DIR = "${params.BACKEND_DEPLOY_DIR}"
-        BACKEND_JAR = "${params.BACKEND_DEPLOY_DIR}\\${params.BACKEND_JAR_NAME}"
-        BACKEND_LOG = "${params.BACKEND_DEPLOY_DIR}\\${params.BACKEND_LOG_NAME}"
-        BACKEND_ERROR_LOG = "${params.BACKEND_DEPLOY_DIR}\\${params.BACKEND_ERROR_LOG_NAME}"
-        TOMCAT_HOME = "${params.TOMCAT_HOME}"
-        TOMCAT_WEBAPPS = "${params.TOMCAT_WEBAPPS}"
-        TOMCAT_PORT = "${params.TOMCAT_PORT}"
-    }
 
     stages {
 
+
+        // =====================================================
+        // 1. CHECKOUT
+        // =====================================================
+
         stage('Checkout') {
+
             steps {
-                git(branch: "${params.GIT_BRANCH}", url: "${params.GIT_REPOSITORY}")
+
+                echo '============================================'
+                echo 'CHECKOUT FROM GITHUB'
+                echo '============================================'
+
+                git(
+                    branch: 'main',
+                    url: "${GIT_REPOSITORY}"
+                )
             }
         }
+
+
+        // =====================================================
+        // 2. CHECK ENVIRONMENT
+        // =====================================================
 
         stage('Check Environment') {
-            
+
             steps {
+
+                echo '============================================'
+                echo 'CHECKING ENVIRONMENT'
+                echo '============================================'
+
                 bat '''
+                    echo.
+                    echo ================= JAVA =================
                     java -version
+
+                    echo.
+                    echo ================= MAVEN =================
                     mvn -version
-                    if "%BACKEND_DIR%"=="" (
-                        echo ERROR: BACKEND_DEPLOY_DIR is required.
+
+                    echo.
+                    echo ============== BACKEND DIR ==============
+
+                    if not exist "%BACKEND_DIR%" (
+                        mkdir "%BACKEND_DIR%"
+                    )
+
+                    echo Backend directory:
+                    echo %BACKEND_DIR%
+
+
+                    echo.
+                    echo ============== QUIZAPP WAR ===============
+
+                    if not exist "%QUIZAPP_WAR%" (
+                        echo ERROR: QuizApp.war was not found.
+                        echo Expected:
+                        echo %QUIZAPP_WAR%
                         exit /b 1
                     )
-                    if not exist "%BACKEND_DIR%" mkdir "%BACKEND_DIR%"
-                    if not exist "%WAR_ONE_SOURCE%" (
-                        echo ERROR: First WAR was not found: %WAR_ONE_SOURCE%
+
+                    echo QuizApp.war found.
+
+
+                    echo.
+                    echo ========= APPZILLON SERVER WAR ===========
+
+                    if not exist "%APPZILLON_SERVER_WAR%" (
+                        echo ERROR: AppzillonServer.war was not found.
+                        echo Expected:
+                        echo %APPZILLON_SERVER_WAR%
                         exit /b 1
                     )
-                    if not exist "%WAR_TWO_SOURCE%" (
-                        echo ERROR: Second WAR was not found: %WAR_TWO_SOURCE%
+
+                    echo AppzillonServer.war found.
+
+
+                    echo.
+                    echo ================ TOMCAT =================
+
+                    if not exist "%TOMCAT_HOME%" (
+                        echo ERROR: Tomcat directory was not found.
+                        echo %TOMCAT_HOME%
                         exit /b 1
                     )
+
                     if not exist "%TOMCAT_HOME%\\bin\\startup.bat" (
-                        echo ERROR: Tomcat startup script was not found.
+                        echo ERROR: startup.bat was not found.
                         exit /b 1
                     )
+
                     if not exist "%TOMCAT_HOME%\\bin\\shutdown.bat" (
-                        echo ERROR: Tomcat shutdown script was not found.
+                        echo ERROR: shutdown.bat was not found.
                         exit /b 1
                     )
+
+                    if not exist "%TOMCAT_WEBAPPS%" (
+                        echo ERROR: Tomcat webapps directory was not found.
+                        echo %TOMCAT_WEBAPPS%
+                        exit /b 1
+                    )
+
+                    echo Tomcat configuration is valid.
                 '''
             }
         }
 
-        stage('Build') {
+
+        // =====================================================
+        // 3. BUILD BACKEND
+        // =====================================================
+
+        stage('Build Backend') {
+
             steps {
+
+                echo '============================================'
+                echo 'BUILDING SPRING BOOT BACKEND'
+                echo '============================================'
+
                 bat '''
-                    call mvn clean test
-                    call mvn package -DskipTests
+                    mvn clean test
+                '''
+
+                bat '''
+                    mvn package -DskipTests
                 '''
             }
         }
+
+
+        // =====================================================
+        // 4. CHECK GENERATED JAR
+        // =====================================================
 
         stage('Check Backend JAR') {
+
             steps {
+
+                echo '============================================'
+                echo 'CHECKING GENERATED JAR'
+                echo '============================================'
+
                 bat '''
-                    if not exist "%SOURCE_JAR%" (
-                        echo ERROR: Backend JAR was not generated: %SOURCE_JAR%
+                    if not exist "target\\quizapp-1.0.0.jar" (
+
+                        echo ERROR:
+                        echo target\\quizapp-1.0.0.jar was not generated.
+
+                        echo.
+                        echo Contents of target:
                         dir target
+
                         exit /b 1
                     )
-                    dir "%SOURCE_JAR%"
+
+                    echo.
+                    echo Backend JAR found successfully:
+
+                    dir "target\\quizapp-1.0.0.jar"
                 '''
             }
         }
+
+
+        // =====================================================
+        // 5. STOP OLD BACKEND
+        // =====================================================
 
         stage('Stop Backend') {
+
             steps {
+
+                echo '============================================'
+                echo 'STOPPING OLD BACKEND'
+                echo 'PORT: 8020'
+                echo '============================================'
+
                 powershell '''
-                    $port = [int]$env:BACKEND_PORT
-                    $connections = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-                    foreach ($connection in $connections) {
-                        Stop-Process -Id $connection.OwningProcess -Force -ErrorAction SilentlyContinue
+                    $port = 8020
+
+                    Write-Host "Checking port $port..."
+
+                    $connections = Get-NetTCPConnection `
+                        -LocalPort $port `
+                        -State Listen `
+                        -ErrorAction SilentlyContinue
+
+                    if ($connections) {
+
+                        foreach ($connection in $connections) {
+
+                            $processId = $connection.OwningProcess
+
+                            Write-Host "Process found on port $port"
+                            Write-Host "PID: $processId"
+
+                            if ($processId -gt 0) {
+
+                                Stop-Process `
+                                    -Id $processId `
+                                    -Force `
+                                    -ErrorAction SilentlyContinue
+
+                                Write-Host "Process stopped."
+                            }
+                        }
+
+                        Start-Sleep -Seconds 5
+
+                    } else {
+
+                        Write-Host "No process is currently using port $port."
                     }
-                    Start-Sleep -Seconds 5
+
+                    Write-Host "Backend stop operation completed."
                 '''
             }
         }
 
-        stage('Deploy Backend') {
+
+        // =====================================================
+        // 6. DEPLOY BACKEND JAR
+        // =====================================================
+
+        stage('Deploy Backend JAR') {
+
             steps {
+
+                echo '============================================'
+                echo 'DEPLOYING BACKEND JAR'
+                echo '============================================'
+
                 bat '''
-                    if "%BACKEND_DIR%"=="" (
-                        echo ERROR: BACKEND_DEPLOY_DIR is required.
+                    if not exist "%BACKEND_DIR%" (
+                        mkdir "%BACKEND_DIR%"
+                    )
+
+                    copy /Y ^
+                    "target\\quizapp-1.0.0.jar" ^
+                    "%BACKEND_JAR%"
+
+                    if errorlevel 1 (
+
+                        echo ERROR:
+                        echo Failed to copy backend JAR.
+
                         exit /b 1
                     )
-                    if not exist "%BACKEND_DIR%" mkdir "%BACKEND_DIR%"
-                    if not exist "%BACKEND_DIR%" exit /b 1
-                    if not exist "%SOURCE_JAR%" (
-                        echo ERROR: Backend JAR was not generated: %SOURCE_JAR%
+
+                    if not exist "%BACKEND_JAR%" (
+
+                        echo ERROR:
+                        echo Backend JAR does not exist after copy.
+
                         exit /b 1
                     )
-                    copy /Y "%SOURCE_JAR%" "%BACKEND_JAR%"
-                    if errorlevel 1 exit /b 1
+
+                    echo.
+                    echo Backend JAR deployed successfully.
+
+                    dir "%BACKEND_JAR%"
                 '''
             }
         }
+
+
+        // =====================================================
+        // 7. START BACKEND
+        // =====================================================
 
         stage('Start Backend') {
+
             steps {
+
+                echo '============================================'
+                echo 'STARTING BACKEND'
+                echo 'PORT: 8020'
+                echo '============================================'
+
                 powershell '''
-                    $port = [int]$env:BACKEND_PORT
-                    $connections = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-                    foreach ($connection in $connections) {
-                        Stop-Process -Id $connection.OwningProcess -Force -ErrorAction SilentlyContinue
+                    $jar =
+                        "C:\\JenkinsStorage\\QuizApp\\quizapp.jar"
+
+                    $log =
+                        "C:\\JenkinsStorage\\QuizApp\\backend.log"
+
+                    $errorLog =
+                        "C:\\JenkinsStorage\\QuizApp\\backend-error.log"
+
+
+                    if (-not (Test-Path $jar)) {
+
+                        Write-Error "Backend JAR not found."
+                        exit 1
                     }
+
+
+                    Write-Host "Starting Spring Boot backend..."
 
                     $env:JENKINS_NODE_COOKIE = "dontKillMe"
                     $env:BUILD_ID = "dontKillMe"
-                    $command = "start `"$env:BACKEND_PROCESS_NAME`" /b java.exe -jar `"$env:BACKEND_JAR`" 1>>`"$env:BACKEND_LOG`" 2>>`"$env:BACKEND_ERROR_LOG`""
-                    Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $command -WorkingDirectory $env:BACKEND_DIR -WindowStyle Hidden
+
+                    $startCommand =
+                        "start `"QuizAppBackend`" /b java.exe -jar `"$jar`" 1>>`"$log`" 2>>`"$errorLog`""
+
+                    Start-Process `
+                        -FilePath "cmd.exe" `
+                        -ArgumentList "/c", $startCommand `
+                        -WorkingDirectory "C:\\JenkinsStorage\\QuizApp" `
+                        -WindowStyle Hidden
+
+
+                    Write-Host ""
+                    Write-Host "Backend launch command completed."
+
+
+                    Start-Sleep -Seconds 2
                 '''
             }
         }
 
-        stage('Verify Backend') {
-            when {
-                expression { params.BACKEND_HEALTH_URL?.trim() }
-            }
+
+        // =====================================================
+        // 8. WAIT FOR BACKEND PORT
+        // =====================================================
+
+        stage('Wait For Backend') {
+
             steps {
-                powershell '''
-                    $response = Invoke-WebRequest -Uri $env:BACKEND_HEALTH_URL -UseBasicParsing -TimeoutSec 20
-                    if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) { exit 1 }
-                '''
-            }
-        }
 
-        stage('Stop Tomcat') {
-            steps {
-                bat '''
-                    call "%TOMCAT_HOME%\\bin\\shutdown.bat" >nul 2>&1 || echo Tomcat was not running; continuing.
-                    powershell.exe -NoProfile -Command "Start-Sleep -Seconds 10"
-                '''
-            }
-        }
+                echo '============================================'
+                echo 'WAITING FOR BACKEND'
+                echo 'PORT: 8020'
+                echo '============================================'
 
-        stage('Clean Frontend') {
-            steps {
-                bat '''
-                    if exist "%TOMCAT_WEBAPPS%\\%WAR_ONE_NAME%" del /F /Q "%TOMCAT_WEBAPPS%\\%WAR_ONE_NAME%"
-                    if exist "%TOMCAT_WEBAPPS%\\%WAR_TWO_NAME%" del /F /Q "%TOMCAT_WEBAPPS%\\%WAR_TWO_NAME%"
-                    if exist "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%" rmdir /S /Q "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%"
-                '''
-            }
-        }
-
-        stage('Deploy Frontend') {
-            steps {
-                bat '''
-                    call "%TOMCAT_HOME%\\bin\\shutdown.bat" >nul 2>&1 || echo Tomcat was not running; continuing.
-                    powershell.exe -NoProfile -Command "Start-Sleep -Seconds 10"
-
-                    if exist "%TOMCAT_WEBAPPS%\\%WAR_ONE_NAME%" del /F /Q "%TOMCAT_WEBAPPS%\\%WAR_ONE_NAME%"
-                    if exist "%TOMCAT_WEBAPPS%\\%WAR_TWO_NAME%" del /F /Q "%TOMCAT_WEBAPPS%\\%WAR_TWO_NAME%"
-                    if exist "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%" rmdir /S /Q "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%"
-
-                    copy /Y "%WAR_ONE_SOURCE%" "%TOMCAT_WEBAPPS%\\%WAR_ONE_NAME%"
-                    if errorlevel 1 exit /b 1
-                    copy /Y "%WAR_TWO_SOURCE%" "%TOMCAT_WEBAPPS%\\%WAR_TWO_NAME%"
-                    if errorlevel 1 exit /b 1
-                '''
-            }
-        }
-
-        stage('Start Tomcat') {
-            steps {
-                bat '''
-                    set "JENKINS_NODE_COOKIE=dontKillMe"
-                    call "%TOMCAT_HOME%\\bin\\startup.bat"
-                '''
-            }
-        }
-
-        stage('Wait For Tomcat') {
-            steps {
                 timeout(time: 90, unit: 'SECONDS') {
+
                     powershell '''
-                        $ready = $false
-                        for ($attempt = 1; $attempt -le 18; $attempt++) {
-                            $result = Test-NetConnection -ComputerName localhost -Port ([int]$env:TOMCAT_PORT) -WarningAction SilentlyContinue
-                            if ($result.TcpTestSucceeded) { $ready = $true; break }
+                        $started = $false
+
+
+                        for ($i = 1; $i -le 18; $i++) {
+
+                            Write-Host "Backend check $i/18..."
+
+
+                            $result = Test-NetConnection `
+                                -ComputerName "localhost" `
+                                -Port 8020 `
+                                -WarningAction SilentlyContinue
+
+
+                            if ($result.TcpTestSucceeded) {
+
+                                Write-Host ""
+                                Write-Host "============================================"
+                                Write-Host "BACKEND PORT 8020 IS RUNNING"
+                                Write-Host "============================================"
+
+                                $started = $true
+
+                                break
+                            }
+
+
                             Start-Sleep -Seconds 5
                         }
-                        if (-not $ready) { exit 1 }
+
+
+                        if (-not $started) {
+
+                            Write-Host ""
+                            Write-Host "BACKEND FAILED TO START."
+
+
+                            Write-Host ""
+                            Write-Host "========== BACKEND LOG =========="
+
+
+                            if (
+                                Test-Path `
+                                "C:\\JenkinsStorage\\QuizApp\\backend.log"
+                            ) {
+
+                                Get-Content `
+                                    "C:\\JenkinsStorage\\QuizApp\\backend.log" `
+                                    -Tail 80
+                            }
+
+
+                            Write-Host ""
+                            Write-Host "======= BACKEND ERROR LOG ========"
+
+
+                            if (
+                                Test-Path `
+                                "C:\\JenkinsStorage\\QuizApp\\backend-error.log"
+                            ) {
+
+                                Get-Content `
+                                    "C:\\JenkinsStorage\\QuizApp\\backend-error.log" `
+                                    -Tail 80
+                            }
+
+
+                            exit 1
+                        }
                     '''
                 }
             }
         }
 
-        stage('Wait For Frontend') {
+
+        // =====================================================
+        // 9. VERIFY BACKEND API
+        // =====================================================
+
+        stage('Verify Backend API') {
+
             steps {
+
+                echo '============================================'
+                echo 'VERIFYING BACKEND API'
+                echo '============================================'
+
                 powershell '''
-                    Start-Sleep -Seconds 20
+
+                    $url =
+                        "http://localhost:8020/api/topics"
+
+
+                    Write-Host ""
+                    Write-Host "Testing backend API:"
+                    Write-Host $url
+
+
+                    try {
+
+                        $response = Invoke-WebRequest `
+                            -Uri $url `
+                            -Method GET `
+                            -UseBasicParsing `
+                            -TimeoutSec 20
+
+
+                        Write-Host ""
+                        Write-Host "HTTP Status:"
+                        Write-Host $response.StatusCode
+
+
+                        if (
+                            $response.StatusCode -ge 200 `
+                            -and
+                            $response.StatusCode -lt 300
+                        ) {
+
+                            Write-Host ""
+                            Write-Host "============================================"
+                            Write-Host "BACKEND API IS WORKING"
+                            Write-Host "============================================"
+
+                            Write-Host ""
+                            Write-Host "Response:"
+                            Write-Host $response.Content
+
+                        } else {
+
+                            Write-Error `
+                                "Backend API returned unexpected HTTP status."
+
+                            exit 1
+                        }
+
+                    } catch {
+
+                        Write-Host ""
+                        Write-Host "============================================"
+                        Write-Host "BACKEND API CHECK FAILED"
+                        Write-Host "============================================"
+
+                        Write-Error $_.Exception.Message
+
+                        Write-Host ""
+                        Write-Host "Backend log:"
+
+                        if (
+                            Test-Path `
+                            "C:\\JenkinsStorage\\QuizApp\\backend.log"
+                        ) {
+
+                            Get-Content `
+                                "C:\\JenkinsStorage\\QuizApp\\backend.log" `
+                                -Tail 80
+                        }
+
+                        exit 1
+                    }
                 '''
             }
         }
 
-        stage('Run E2E Tests') {
+
+        // =====================================================
+        // 10. STOP TOMCAT
+        // =====================================================
+
+        stage('Stop Tomcat') {
+
             steps {
+
+                echo '============================================'
+                echo 'STOPPING TOMCAT'
+                echo 'PORT: 8084'
+                echo '============================================'
+
                 bat '''
-                    call mvn exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install %PLAYWRIGHT_BROWSER%"
-                    if errorlevel 1 exit /b 1
-                    call mvn -P%E2E_PROFILE% verify -Dfrontend.url=%FRONTEND_URL%
-                    if errorlevel 1 exit /b 1
-                    if not exist "%E2E_REPORT_DIR%" (
-                        echo ERROR: E2E report directory was not generated.
+
+                    call "%TOMCAT_HOME%\\bin\\shutdown.bat" >nul 2>&1 || echo Tomcat was not running; continuing.
+
+                    echo Waiting for Tomcat to stop...
+
+                    powershell.exe -NoProfile -Command "Start-Sleep -Seconds 10"
+
+                    echo Tomcat stop completed.
+                '''
+            }
+        }
+
+
+        // =====================================================
+        // 11. CLEAN OLD FRONTEND DEPLOYMENT
+        // =====================================================
+
+        stage('Clean Frontend') {
+
+            steps {
+
+                echo '============================================'
+                echo 'CLEANING OLD FRONTEND'
+                echo '============================================'
+
+                bat '''
+
+                    if exist "%TOMCAT_WEBAPPS%\\QuizApp.war" (
+                        del /F /Q "%TOMCAT_WEBAPPS%\\QuizApp.war"
+                    )
+
+
+                    if exist "%TOMCAT_WEBAPPS%\\quizapp.war" (
+                        del /F /Q "%TOMCAT_WEBAPPS%\\quizapp.war"
+                    )
+
+
+                    if exist "%TOMCAT_WEBAPPS%\\AppzillonServer.war" (
+                        del /F /Q "%TOMCAT_WEBAPPS%\\AppzillonServer.war"
+                    )
+
+
+                    if exist "%TOMCAT_WEBAPPS%\\QuizApp" (
+                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\QuizApp"
+                    )
+
+
+                    if exist "%TOMCAT_WEBAPPS%\\quizapp" (
+                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\quizapp"
+                    )
+
+
+                    if exist "%TOMCAT_WEBAPPS%\\AppzillonServer" (
+                        rmdir /S /Q "%TOMCAT_WEBAPPS%\\AppzillonServer"
+                    )
+
+
+                    echo.
+                    echo Old frontend deployment cleaned.
+                '''
+            }
+        }
+
+
+        // =====================================================
+        // 12. DEPLOY FRONTEND WAR
+        // =====================================================
+
+        stage('Deploy Frontend') {
+
+            steps {
+
+                echo '============================================'
+                echo 'DEPLOYING FRONTEND WAR FILES'
+                echo '============================================'
+
+                bat '''
+
+                    echo.
+                    echo Deploying QuizApp.war...
+
+
+                    copy /Y ^
+                    "%QUIZAPP_WAR%" ^
+                    "%TOMCAT_WEBAPPS%\\quizapp.war"
+
+
+                    if errorlevel 1 (
+
+                        echo ERROR:
+                        echo QuizApp.war deployment failed.
+
                         exit /b 1
                     )
+
+
+                    echo QuizApp.war deployed successfully.
+
+
+                    echo.
+                    echo Deploying AppzillonServer.war...
+
+
+                    copy /Y ^
+                    "%APPZILLON_SERVER_WAR%" ^
+                    "%TOMCAT_WEBAPPS%\\AppzillonServer.war"
+
+
+                    if errorlevel 1 (
+
+                        echo ERROR:
+                        echo AppzillonServer.war deployment failed.
+
+                        exit /b 1
+                    )
+
+
+                    echo AppzillonServer.war deployed successfully.
+
+
+                    echo.
+                    echo ============================================
+                    echo FRONTEND WAR DEPLOYMENT COMPLETE
+                    echo ============================================
                 '''
             }
         }
 
-        stage('Verify Frontend Deployment') {
+
+        // =====================================================
+        // 13. START TOMCAT
+        // =====================================================
+
+        stage('Start Tomcat') {
+
             steps {
+
+                echo '============================================'
+                echo 'STARTING TOMCAT'
+                echo 'PORT: 8084'
+                echo '============================================'
+
                 bat '''
-                    if not exist "%TOMCAT_WEBAPPS%\\%WAR_ONE_NAME%" exit /b 1
-                    if not exist "%TOMCAT_WEBAPPS%\\%WAR_TWO_NAME%" exit /b 1
+
+                    set "JENKINS_NODE_COOKIE=dontKillMe"
+
+                    call "%TOMCAT_HOME%\\bin\\startup.bat"
+
+                    echo.
+                    echo Tomcat startup command completed.
                 '''
             }
         }
 
-        stage('Verify Frontend HTTP') {
+
+        // =====================================================
+        // 14. WAIT FOR TOMCAT
+        // =====================================================
+
+        stage('Wait For Tomcat') {
+
             steps {
-                powershell '''
-                    $ready = $false
-                    for ($attempt = 1; $attempt -le 12; $attempt++) {
-                        try {
-                            $response = Invoke-WebRequest -Uri $env:FRONTEND_URL -UseBasicParsing -TimeoutSec 10
-                            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 400) {
-                                $ready = $true
+
+                echo '============================================'
+                echo 'WAITING FOR TOMCAT'
+                echo 'PORT: 8084'
+                echo '============================================'
+
+                timeout(time: 90, unit: 'SECONDS') {
+
+                    powershell '''
+
+                        $started = $false
+
+
+                        for ($i = 1; $i -le 18; $i++) {
+
+                            Write-Host "Tomcat check $i/18..."
+
+
+                            $result = Test-NetConnection `
+                                -ComputerName "localhost" `
+                                -Port 8084 `
+                                -WarningAction SilentlyContinue
+
+
+                            if ($result.TcpTestSucceeded) {
+
+                                Write-Host ""
+                                Write-Host "============================================"
+                                Write-Host "TOMCAT IS RUNNING ON PORT 8084"
+                                Write-Host "============================================"
+
+                                $started = $true
+
                                 break
                             }
+
+
+                            Start-Sleep -Seconds 5
+                        }
+
+
+                        if (-not $started) {
+
+                            Write-Host ""
+                            Write-Host "TOMCAT FAILED TO START."
+
+
+                            Write-Host ""
+                            Write-Host "Tomcat logs are located at:"
+
+                            Write-Host `
+                                "D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\logs"
+
+
+                            exit 1
+                        }
+                    '''
+                }
+            }
+        }
+
+
+        // =====================================================
+        // 15. WAIT FOR APPZILLON
+        // =====================================================
+
+        stage('Wait For Appzillon') {
+
+            steps {
+
+                echo '============================================'
+                echo 'WAITING FOR APPZILLON DEPLOYMENT'
+                echo '============================================'
+
+                bat '''
+
+                    powershell.exe -NoProfile -Command "Start-Sleep -Seconds 20"
+
+                    echo Appzillon deployment wait completed.
+                '''
+            }
+        }
+
+
+        // =====================================================
+        // 16. RUN PLAYWRIGHT FRONTEND TEST
+        // =====================================================
+
+        stage('Run Playwright Frontend Test') {
+
+            steps {
+
+                echo '============================================'
+                echo 'RUNNING PLAYWRIGHT FRONTEND TEST'
+                echo '============================================'
+
+                bat '''
+                    call mvn exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install chromium"
+                    if errorlevel 1 exit /b 1
+
+                    call mvn -Pe2e verify -Dfrontend.url=%FRONTEND_URL%
+                    if errorlevel 1 exit /b 1
+
+                    if not exist "target\\failsafe-reports\\TEST-QuizAppE2EIT.xml" (
+                        echo ERROR: Playwright test report was not generated.
+                        exit /b 1
+                    )
+
+                '''
+            }
+        }
+
+
+        // =====================================================
+        // 17. VERIFY FRONTEND FILES
+        // =====================================================
+
+        stage('Verify Frontend Deployment') {
+
+            steps {
+
+                echo '============================================'
+                echo 'VERIFYING FRONTEND DEPLOYMENT'
+                echo '============================================'
+
+                bat '''
+
+                    echo.
+                    echo Checking quizapp.war...
+
+
+                    if not exist "%TOMCAT_WEBAPPS%\\quizapp.war" (
+
+                        echo ERROR:
+                        echo quizapp.war was not deployed.
+
+                        exit /b 1
+                    )
+
+
+                    echo quizapp.war -> OK
+
+
+                    echo.
+                    echo Checking AppzillonServer.war...
+
+
+                    if not exist "%TOMCAT_WEBAPPS%\\AppzillonServer.war" (
+
+                        echo ERROR:
+                        echo AppzillonServer.war was not deployed.
+
+                        exit /b 1
+                    )
+
+
+                    echo AppzillonServer.war -> OK
+
+
+                    echo.
+                    echo ============================================
+                    echo FRONTEND FILES VERIFIED
+                    echo ============================================
+                '''
+            }
+        }
+
+
+        // =====================================================
+        // 18. VERIFY FRONTEND HTTP
+        // =====================================================
+
+        stage('Verify Frontend HTTP') {
+
+            steps {
+
+                echo '============================================'
+                echo 'VERIFYING FRONTEND HTTP'
+                echo '============================================'
+
+                powershell '''
+
+                    $url =
+                        "http://localhost:8084/quizapp"
+
+
+                    Write-Host ""
+                    Write-Host "Testing frontend:"
+                    Write-Host $url
+
+
+                    $frontendReady = $false
+
+                    for ($attempt = 1; $attempt -le 12; $attempt++) {
+
+                        Write-Host "Frontend check $attempt/12..."
+
+                        try {
+
+                            $response = Invoke-WebRequest `
+                                -Uri $url `
+                                -Method GET `
+                                -UseBasicParsing `
+                                -TimeoutSec 10
+
+                            Write-Host "HTTP Status: $($response.StatusCode)"
+
+                            if (
+                                $response.StatusCode -ge 200 `
+                                -and
+                                $response.StatusCode -lt 400
+                            ) {
+
+                                $frontendReady = $true
+                                break
+                            }
+
+                            Write-Host "Frontend returned HTTP $($response.StatusCode)."
+
                         } catch {
+
                             Write-Host "Frontend is not ready: $($_.Exception.Message)"
                         }
+
                         Start-Sleep -Seconds 10
                     }
-                    if (-not $ready) { exit 1 }
+
+                    if (-not $frontendReady) {
+
+                        Write-Error "Frontend did not return a successful response within 120 seconds."
+                        exit 1
+                    }
+
+                    Write-Host ""
+                    Write-Host "============================================"
+                    Write-Host "FRONTEND IS WORKING"
+                    Write-Host "============================================"
                 '''
             }
         }
+
+
+        // =====================================================
+        // 19. FINAL SERVICE CHECK
+        // =====================================================
 
         stage('Final Service Check') {
+
             steps {
+
+                echo '============================================'
+                echo 'FINAL CI/CD SERVICE CHECK'
+                echo '============================================'
+
                 powershell '''
-                    $backend = Test-NetConnection localhost -Port ([int]$env:BACKEND_PORT) -WarningAction SilentlyContinue
-                    $tomcat = Test-NetConnection localhost -Port ([int]$env:TOMCAT_PORT) -WarningAction SilentlyContinue
-                    if (-not $backend.TcpTestSucceeded) { exit 1 }
-                    if (-not $tomcat.TcpTestSucceeded) { exit 1 }
+
+                    Write-Host ""
+                    Write-Host "Checking Backend :8020..."
+
+
+                    $backend = Test-NetConnection `
+                        -ComputerName "localhost" `
+                        -Port 8020 `
+                        -WarningAction SilentlyContinue
+
+
+                    if (-not $backend.TcpTestSucceeded) {
+
+                        Write-Error `
+                            "Backend is not running on port 8020."
+
+                        exit 1
+                    }
+
+
+                    Write-Host "Backend :8020 -> RUNNING"
+
+
+                    Write-Host ""
+                    Write-Host "Checking Frontend/Tomcat :8084..."
+
+
+                    $frontend = Test-NetConnection `
+                        -ComputerName "localhost" `
+                        -Port 8084 `
+                        -WarningAction SilentlyContinue
+
+
+                    if (-not $frontend.TcpTestSucceeded) {
+
+                        Write-Error `
+                            "Frontend/Tomcat is not running on port 8084."
+
+                        exit 1
+                    }
+
+
+                    Write-Host "Frontend/Tomcat :8084 -> RUNNING"
+
+
+                    Write-Host ""
+                    Write-Host "============================================"
+                    Write-Host "CI/CD DEPLOYMENT COMPLETED SUCCESSFULLY"
+                    Write-Host "============================================"
+
                 '''
             }
         }
-
     }
 
+
+    // =========================================================
+    // POST ACTIONS
+    // =========================================================
+
     post {
+
         success {
-            echo 'Generic deployment completed successfully.'
+
+            echo '''
+============================================================
+              CI/CD DEPLOYMENT SUCCESSFUL
+============================================================
+
+BACKEND
+------------------------------------------------------------
+
+Backend URL:
+http://localhost:8020/api/topics
+
+Backend Port:
+8020
+
+Backend JAR:
+C:\\JenkinsStorage\\QuizApp\\quizapp.jar
+
+
+FRONTEND
+------------------------------------------------------------
+
+Frontend URL:
+http://localhost:8084/quizapp
+
+Frontend Port:
+8084
+
+
+APPZILLON
+------------------------------------------------------------
+
+Appzillon Server:
+http://localhost:8084/AppzillonServer
+
+
+DEPLOYED FILES
+------------------------------------------------------------
+
+QuizApp WAR:
+C:\\JenkinsStorage\\QuizApp.war
+
+Appzillon Server WAR:
+C:\\JenkinsStorage\\AppzillonServer.war
+
+
+LOGS
+------------------------------------------------------------
+
+Backend Log:
+C:\\JenkinsStorage\\QuizApp\\backend.log
+
+Backend Error Log:
+C:\\JenkinsStorage\\QuizApp\\backend-error.log
+
+
+============================================================
+        BACKEND + FRONTEND ARE RUNNING
+============================================================
+'''
         }
+
+
         failure {
-            echo 'Generic deployment failed. Check backend and Tomcat logs.'
+
+            echo '''
+============================================================
+                 CI/CD DEPLOYMENT FAILED
+============================================================
+
+Please check the Jenkins Console Output.
+
+BACKEND LOG:
+C:\\JenkinsStorage\\QuizApp\\backend.log
+
+BACKEND ERROR LOG:
+C:\\JenkinsStorage\\QuizApp\\backend-error.log
+
+TOMCAT LOGS:
+D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\logs
+
+============================================================
+'''
         }
     }
 }

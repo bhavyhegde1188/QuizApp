@@ -1,0 +1,23 @@
+{
+  "name": "quizapp",
+  "version": "1.0.0",
+  "description": "Spring Boot + Spring Data JPA + MySQL backend for the Quiz Management System. No authentication, no PUT/DELETE — matches the agreed project scope.",
+  "main": "index.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bhavyhegde1188/QuizApp.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/bhavyhegde1188/QuizApp/issues"
+  },
+  "homepage": "https://github.com/bhavyhegde1188/QuizApp#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.4.0"
+  }
+}

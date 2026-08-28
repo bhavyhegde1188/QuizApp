@@ -828,7 +828,27 @@ pipeline {
 
 
         // =====================================================
-        // 16. VERIFY FRONTEND FILES
+        // 16. RUN PLAYWRIGHT FRONTEND TEST
+        // =====================================================
+
+        stage('Run Playwright Frontend Test') {
+
+            steps {
+
+                echo '============================================'
+                echo 'RUNNING PLAYWRIGHT FRONTEND TEST'
+                echo '============================================'
+
+                bat '''
+                    mvn exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install chromium"
+                    mvn -Pe2e verify -Dfrontend.url=%FRONTEND_URL%
+                '''
+            }
+        }
+
+
+        // =====================================================
+        // 17. VERIFY FRONTEND FILES
         // =====================================================
 
         stage('Verify Frontend Deployment') {
@@ -883,7 +903,7 @@ pipeline {
 
 
         // =====================================================
-        // 17. VERIFY FRONTEND HTTP
+        // 18. VERIFY FRONTEND HTTP
         // =====================================================
 
         stage('Verify Frontend HTTP') {
@@ -953,7 +973,7 @@ pipeline {
 
 
         // =====================================================
-        // 18. FINAL SERVICE CHECK
+        // 19. FINAL SERVICE CHECK
         // =====================================================
 
         stage('Final Service Check') {

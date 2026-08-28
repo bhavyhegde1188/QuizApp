@@ -1,0 +1,15 @@
+# Created at 2026-08-28T09:56:59.147
+Corrupted channel by directly writing to native stream in forked JVM 1. Stream '[0.031s][warning][cds] This file is not the one used while building the shared archive file: 'C:\Users\bhavyashri.hegde\AppData\Roaming\Code\User\globalStorage\pleiades.java-extension-pack-jdk\java\25\lib\modules', size has changed'.
+
+# Created at 2026-08-28T10:15:18.711
+TestSet has not finished before stream error has appeared >> initializing exit by non-null configuration: EXIT
+java.io.EOFException
+	at org.apache.maven.surefire.api.stream.AbstractStreamDecoder.read(AbstractStreamDecoder.java:444)
+	at org.apache.maven.surefire.api.stream.AbstractStreamDecoder.read(AbstractStreamDecoder.java:419)
+	at org.apache.maven.surefire.api.stream.AbstractStreamDecoder.readMessageType(AbstractStreamDecoder.java:116)
+	at org.apache.maven.surefire.booter.stream.CommandDecoder.decode(CommandDecoder.java:77)
+	at org.apache.maven.surefire.booter.spi.CommandChannelDecoder.decode(CommandChannelDecoder.java:60)
+	at org.apache.maven.surefire.booter.CommandReader$CommandRunnable.run(CommandReader.java:290)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+
+

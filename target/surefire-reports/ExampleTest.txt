@@ -1,0 +1,16 @@
+-------------------------------------------------------------------------------
+Test set: ExampleTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 26.47 s <<< FAILURE! -- in ExampleTest
+ExampleTest.quizAppFlow -- Time elapsed: 26.43 s <<< ERROR!
+com.microsoft.playwright.impl.TargetClosedError: Target page, context or browser has been closed
+	at com.microsoft.playwright.impl.PageImpl$WaitablePageClose.get(PageImpl.java:1414)
+	at com.microsoft.playwright.impl.WaitableRace.get(WaitableRace.java:46)
+	at com.microsoft.playwright.impl.WaitableRace.get(WaitableRace.java:46)
+	at com.microsoft.playwright.impl.ChannelOwner.runUntil(ChannelOwner.java:138)
+	at com.microsoft.playwright.impl.PageImpl.pause(PageImpl.java:1017)
+	at ExampleTest.quizAppFlow(ExampleTest.java:81)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1604)
+

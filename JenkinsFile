@@ -4,16 +4,18 @@ pipeline {
 
     options {
         skipDefaultCheckout(true)
-        timeout(time: 30, unit: 'MINUTES')
-        disableConcurrentBuilds()
+        timeout(time: 10, unit: 'MINUTES')
     }
 
     parameters {
         string(name: 'GIT_REPOSITORY', defaultValue: 'https://github.com/bhavyhegde1188/QuizApp.git', description: 'Git repository URL')
         string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch')
-        string(name: 'PROJECT_NAME', defaultValue: 'QuizApp', description: 'Project deployment folder name')
         string(name: 'BACKEND_DEPLOY_DIR', defaultValue: 'C:\\JenkinsStorage\\QuizApp', description: 'Required backend deployment directory')
-        string(name: 'SOURCE_JAR', defaultValue: 'target/*.jar', description: 'Built backend JAR path')
+        string(name: 'SOURCE_JAR', defaultValue: 'target\\quizapp-1.0.0.jar', description: 'Built backend JAR path')
+        string(name: 'BACKEND_JAR_NAME', defaultValue: 'quizapp.jar', description: 'Deployed backend JAR filename')
+        string(name: 'BACKEND_PROCESS_NAME', defaultValue: 'QuizAppBackend', description: 'Backend process window name')
+        string(name: 'BACKEND_LOG_NAME', defaultValue: 'backend.log', description: 'Backend standard output log filename')
+        string(name: 'BACKEND_ERROR_LOG_NAME', defaultValue: 'backend-error.log', description: 'Backend error log filename')
         string(name: 'BACKEND_PORT', defaultValue: '8020', description: 'Backend port')
         string(name: 'BACKEND_HEALTH_URL', defaultValue: 'http://localhost:8020/api/topics', description: 'Backend health URL')
         string(name: 'WAR_ONE_SOURCE', defaultValue: 'C:\\JenkinsStorage\\QuizApp.war', description: 'First WAR source path')
@@ -25,14 +27,15 @@ pipeline {
         string(name: 'E2E_PROFILE', defaultValue: 'e2e', description: 'Maven profile for browser tests')
         string(name: 'PLAYWRIGHT_BROWSER', defaultValue: 'chromium', description: 'Playwright browser to install')
         string(name: 'E2E_REPORT_DIR', defaultValue: 'target\\failsafe-reports', description: 'E2E report directory')
+        string(name: 'TOMCAT_HOME', defaultValue: 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53', description: 'Tomcat installation directory')
+        string(name: 'TOMCAT_WEBAPPS', defaultValue: 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\webapps', description: 'Tomcat webapps directory')
+        string(name: 'TOMCAT_PORT', defaultValue: '8084', description: 'Tomcat HTTP port')
     }
 
     environment {
-        STORAGE_ROOT = 'C:\\JenkinsStorage'
-        TOMCAT_HOME = 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53'
-        TOMCAT_WEBAPPS = 'D:\\apache-tomcat-9.0.53-windows-x64\\apache-tomcat-9.0.53\\webapps'
-        TOMCAT_PORT = '8084'
         SOURCE_JAR = "${params.SOURCE_JAR}"
+        BACKEND_JAR_NAME = "${params.BACKEND_JAR_NAME}"
+        BACKEND_PROCESS_NAME = "${params.BACKEND_PROCESS_NAME}"
         BACKEND_PORT = "${params.BACKEND_PORT}"
         BACKEND_HEALTH_URL = "${params.BACKEND_HEALTH_URL}"
         WAR_ONE_SOURCE = "${params.WAR_ONE_SOURCE}"
@@ -45,9 +48,12 @@ pipeline {
         PLAYWRIGHT_BROWSER = "${params.PLAYWRIGHT_BROWSER}"
         E2E_REPORT_DIR = "${params.E2E_REPORT_DIR}"
         BACKEND_DIR = "${params.BACKEND_DEPLOY_DIR}"
-        BACKEND_JAR = "${params.BACKEND_DEPLOY_DIR}\\BackendJar.jar"
-        BACKEND_LOG = "${params.BACKEND_DEPLOY_DIR}\\Backend.log"
-        BACKEND_ERROR_LOG = "${params.BACKEND_DEPLOY_DIR}\\Backend-error.log"
+        BACKEND_JAR = "${params.BACKEND_DEPLOY_DIR}\\${params.BACKEND_JAR_NAME}"
+        BACKEND_LOG = "${params.BACKEND_DEPLOY_DIR}\\${params.BACKEND_LOG_NAME}"
+        BACKEND_ERROR_LOG = "${params.BACKEND_DEPLOY_DIR}\\${params.BACKEND_ERROR_LOG_NAME}"
+        TOMCAT_HOME = "${params.TOMCAT_HOME}"
+        TOMCAT_WEBAPPS = "${params.TOMCAT_WEBAPPS}"
+        TOMCAT_PORT = "${params.TOMCAT_PORT}"
     }
 
     stages {
@@ -59,6 +65,7 @@ pipeline {
         }
 
         stage('Check Environment') {
+            
             steps {
                 bat '''
                     java -version
@@ -97,6 +104,32 @@ pipeline {
             }
         }
 
+        stage('Check Backend JAR') {
+            steps {
+                bat '''
+                    if not exist "%SOURCE_JAR%" (
+                        echo ERROR: Backend JAR was not generated: %SOURCE_JAR%
+                        dir target
+                        exit /b 1
+                    )
+                    dir "%SOURCE_JAR%"
+                '''
+            }
+        }
+
+        stage('Stop Backend') {
+            steps {
+                powershell '''
+                    $port = [int]$env:BACKEND_PORT
+                    $connections = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+                    foreach ($connection in $connections) {
+                        Stop-Process -Id $connection.OwningProcess -Force -ErrorAction SilentlyContinue
+                    }
+                    Start-Sleep -Seconds 5
+                '''
+            }
+        }
+
         stage('Deploy Backend') {
             steps {
                 bat '''
@@ -127,7 +160,7 @@ pipeline {
 
                     $env:JENKINS_NODE_COOKIE = "dontKillMe"
                     $env:BUILD_ID = "dontKillMe"
-                    $command = "start `"Backend`" /b java.exe -jar `"$env:BACKEND_JAR`" 1>>`"$env:BACKEND_LOG`" 2>>`"$env:BACKEND_ERROR_LOG`""
+                    $command = "start `"$env:BACKEND_PROCESS_NAME`" /b java.exe -jar `"$env:BACKEND_JAR`" 1>>`"$env:BACKEND_LOG`" 2>>`"$env:BACKEND_ERROR_LOG`""
                     Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $command -WorkingDirectory $env:BACKEND_DIR -WindowStyle Hidden
                 '''
             }
@@ -141,6 +174,25 @@ pipeline {
                 powershell '''
                     $response = Invoke-WebRequest -Uri $env:BACKEND_HEALTH_URL -UseBasicParsing -TimeoutSec 20
                     if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) { exit 1 }
+                '''
+            }
+        }
+
+        stage('Stop Tomcat') {
+            steps {
+                bat '''
+                    call "%TOMCAT_HOME%\\bin\\shutdown.bat" >nul 2>&1 || echo Tomcat was not running; continuing.
+                    powershell.exe -NoProfile -Command "Start-Sleep -Seconds 10"
+                '''
+            }
+        }
+
+        stage('Clean Frontend') {
+            steps {
+                bat '''
+                    if exist "%TOMCAT_WEBAPPS%\\%WAR_ONE_NAME%" del /F /Q "%TOMCAT_WEBAPPS%\\%WAR_ONE_NAME%"
+                    if exist "%TOMCAT_WEBAPPS%\\%WAR_TWO_NAME%" del /F /Q "%TOMCAT_WEBAPPS%\\%WAR_TWO_NAME%"
+                    if exist "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%" rmdir /S /Q "%TOMCAT_WEBAPPS%\\%FRONTEND_CONTEXT%"
                 '''
             }
         }
@@ -188,6 +240,14 @@ pipeline {
             }
         }
 
+        stage('Wait For Frontend') {
+            steps {
+                powershell '''
+                    Start-Sleep -Seconds 20
+                '''
+            }
+        }
+
         stage('Run E2E Tests') {
             steps {
                 bat '''
@@ -203,18 +263,47 @@ pipeline {
             }
         }
 
-        stage('Verify Deployment') {
+        stage('Verify Frontend Deployment') {
             steps {
                 bat '''
                     if not exist "%TOMCAT_WEBAPPS%\\%WAR_ONE_NAME%" exit /b 1
                     if not exist "%TOMCAT_WEBAPPS%\\%WAR_TWO_NAME%" exit /b 1
                 '''
+            }
+        }
+
+        stage('Verify Frontend HTTP') {
+            steps {
                 powershell '''
-                    $response = Invoke-WebRequest -Uri $env:FRONTEND_URL -UseBasicParsing -TimeoutSec 120
-                    if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) { exit 1 }
+                    $ready = $false
+                    for ($attempt = 1; $attempt -le 12; $attempt++) {
+                        try {
+                            $response = Invoke-WebRequest -Uri $env:FRONTEND_URL -UseBasicParsing -TimeoutSec 10
+                            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 400) {
+                                $ready = $true
+                                break
+                            }
+                        } catch {
+                            Write-Host "Frontend is not ready: $($_.Exception.Message)"
+                        }
+                        Start-Sleep -Seconds 10
+                    }
+                    if (-not $ready) { exit 1 }
                 '''
             }
         }
+
+        stage('Final Service Check') {
+            steps {
+                powershell '''
+                    $backend = Test-NetConnection localhost -Port ([int]$env:BACKEND_PORT) -WarningAction SilentlyContinue
+                    $tomcat = Test-NetConnection localhost -Port ([int]$env:TOMCAT_PORT) -WarningAction SilentlyContinue
+                    if (-not $backend.TcpTestSucceeded) { exit 1 }
+                    if (-not $tomcat.TcpTestSucceeded) { exit 1 }
+                '''
+            }
+        }
+
     }
 
     post {

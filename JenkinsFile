@@ -12,6 +12,7 @@ pipeline {
         string(name: 'GIT_REPOSITORY', defaultValue: '', description: 'Git repository URL')
         string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch')
         string(name: 'PROJECT_NAME', defaultValue: 'Project', description: 'Project deployment folder name')
+        string(name: 'BACKEND_DEPLOY_DIR', defaultValue: 'C:\\JenkinsStorage\\QuizApp', description: 'Required backend deployment directory')
         string(name: 'SOURCE_JAR', defaultValue: 'target/*.jar', description: 'Built backend JAR path')
         string(name: 'BACKEND_PORT', defaultValue: '8020', description: 'Backend port')
         string(name: 'BACKEND_HEALTH_URL', defaultValue: '', description: 'Backend health URL; leave empty to skip API check')
@@ -43,10 +44,10 @@ pipeline {
         E2E_PROFILE = "${params.E2E_PROFILE}"
         PLAYWRIGHT_BROWSER = "${params.PLAYWRIGHT_BROWSER}"
         E2E_REPORT_DIR = "${params.E2E_REPORT_DIR}"
-        BACKEND_DIR = "${STORAGE_ROOT}\\${params.PROJECT_NAME}"
-        BACKEND_JAR = "${STORAGE_ROOT}\\${params.PROJECT_NAME}\\BackendJar.jar"
-        BACKEND_LOG = "${STORAGE_ROOT}\\${params.PROJECT_NAME}\\Backend.log"
-        BACKEND_ERROR_LOG = "${STORAGE_ROOT}\\${params.PROJECT_NAME}\\Backend-error.log"
+        BACKEND_DIR = "${params.BACKEND_DEPLOY_DIR}"
+        BACKEND_JAR = "${params.BACKEND_DEPLOY_DIR}\\BackendJar.jar"
+        BACKEND_LOG = "${params.BACKEND_DEPLOY_DIR}\\Backend.log"
+        BACKEND_ERROR_LOG = "${params.BACKEND_DEPLOY_DIR}\\Backend-error.log"
     }
 
     stages {
@@ -62,6 +63,10 @@ pipeline {
                 bat '''
                     java -version
                     mvn -version
+                    if "%BACKEND_DIR%"=="" (
+                        echo ERROR: BACKEND_DEPLOY_DIR is required.
+                        exit /b 1
+                    )
                     if not exist "%BACKEND_DIR%" mkdir "%BACKEND_DIR%"
                     if not exist "%WAR_ONE_SOURCE%" (
                         echo ERROR: First WAR was not found: %WAR_ONE_SOURCE%

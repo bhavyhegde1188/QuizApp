@@ -62,7 +62,7 @@ pipeline {
         // are fixed pipeline behavior; only the toggle and the tests' folder
         // location vary per project.
         booleanParam(name: 'RUN_E2E_TESTS', defaultValue: false, description: 'Run the Playwright end-to-end test stage against FRONTEND_URL, launching Chromium visibly')
-        string(name: 'PLAYWRIGHT_DIR', defaultValue: 'D:\\Deployment\\scripts', description: 'Path to this project\'s Playwright test folder (must contain package.json, package-lock.json, tests/). Required if RUN_E2E_TESTS is true.')
+        string(name: 'PLAYWRIGHT_DIR', defaultValue: '.', description: 'Path to the Playwright test folder (package.json, package-lock.json, playwright.config.js, tests/), relative to the repo checkout. Playwright ships inside the project repo itself, so this is usually just "." (the repo root) — only change it if a project nests its tests in a subfolder, e.g. "e2e". Required if RUN_E2E_TESTS is true.')
     }
 
     environment {
@@ -174,7 +174,7 @@ pipeline {
 
                             echo.
                             echo ================= NPM ==================
-                            npm -v
+                            call npm -v
                             if errorlevel 1 (
                                 echo ERROR: npm not available
                                 exit /b 1
@@ -601,12 +601,15 @@ pipeline {
         // =====================================================
         // 16. RUN E2E TESTS (OPTIONAL)
         // =====================================================
-        // Node/npm-based Playwright project. Per-project inputs are just
-        // RUN_E2E_TESTS and PLAYWRIGHT_DIR. FRONTEND_URL (already built
-        // from TOMCAT_PORT + APP_CONTEXT_PATH) is passed in as BASE_URL so
-        // the test project's playwright.config picks it up automatically —
-        // no separate URL parameter to fill in. "--headed" makes Chromium
-        // launch as a visible window instead of running in the background.
+        // Node/npm-based Playwright project. It ships inside the same repo
+        // as the backend (package.json, playwright.config.js, tests/ all
+        // sit at the repo root next to pom.xml), so no separate checkout
+        // or external path is needed — PLAYWRIGHT_DIR defaults to ".".
+        // FRONTEND_URL (already built from TOMCAT_PORT + APP_CONTEXT_PATH)
+        // is passed in as BASE_URL so playwright.config picks it up
+        // automatically — no separate URL parameter to fill in. "--headed"
+        // makes Chromium launch as a visible window instead of running in
+        // the background.
         stage('Run E2E Tests') {
             when { expression { return params.RUN_E2E_TESTS } }
             steps {
@@ -615,6 +618,11 @@ pipeline {
                 echo "Frontend URL: ${FRONTEND_URL}"
                 echo '============================================'
 
+                // NOTE: npx/npm are .cmd wrappers on Windows. Every one of
+                // them MUST be prefixed with "call", otherwise control
+                // transfers into that child script and never returns —
+                // every command after the first npx/npm call gets silently
+                // skipped for the rest of this bat block.
                 bat """
                     cd /D "${params.PLAYWRIGHT_DIR}"
 
@@ -622,7 +630,7 @@ pipeline {
                     echo ============================================
                     echo PLAYWRIGHT VERSION
                     echo ============================================
-                    npx playwright --version
+                    call npx playwright --version
                     if errorlevel 1 (
                         echo ERROR: Playwright not available
                         exit /b 1
@@ -632,7 +640,7 @@ pipeline {
                     echo ============================================
                     echo INSTALLING NODE DEPENDENCIES
                     echo ============================================
-                    npm ci
+                    call npm ci
                     if errorlevel 1 (
                         echo ERROR: npm ci failed
                         exit /b 1
@@ -642,7 +650,7 @@ pipeline {
                     echo ============================================
                     echo INSTALLING CHROMIUM
                     echo ============================================
-                    npx playwright install chromium
+                    call npx playwright install chromium
                     if errorlevel 1 (
                         echo ERROR: Chromium installation failed
                         exit /b 1
@@ -660,7 +668,7 @@ pipeline {
                     echo STARTING PLAYWRIGHT TESTS
                     echo ============================================
                     set BASE_URL=${FRONTEND_URL}
-                    npx playwright test --headed
+                    call npx playwright test --headed
                     if errorlevel 1 (
                         echo PLAYWRIGHT TESTS FAILED
                         exit /b 1
